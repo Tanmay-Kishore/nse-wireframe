@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en" data-page="overview">
+  <head>
+    <meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>NSE Stocks Monitor · Wireframe</title>
+<link rel="stylesheet" href="/assets/css/styles.css" />
+<script defer src="/assets/js/app.js"></script>
+
+  </head>
+  <body>
+    <header class="wf-header">
+  <div class="wf-container">
+    <div class="wf-brand"><a href="/index.html">NSE Monitor</a><span class="wf-badge">wireframe</span></div>
+    <nav class="wf-nav">
+      <a href="/index.html" data-nav="overview">Overview</a>
+      <a href="/screener.html" data-nav="screener">Screener</a>
+      <a href="/stock.html" data-nav="stock">Stock Detail</a>
+      <a href="/alerts.html" data-nav="alerts">Alerts</a>
+      <a href="/journal.html" data-nav="journal">Journal</a>
+      <a href="/settings.html" data-nav="settings">Settings</a>
+    </nav>
+  </div>
+</header>
+
+    <main class="wf-container wf-main">
+      <section class="wf-row">
+        <div class="wf-col-8">
+          <div class="wf-card">
+            <div class="wf-card-head">Market Snapshot (NIFTY 50 / Bank Nifty)</div>
+            <div class="wf-grid-3" id="market-snapshot">
+              <div class="wf-skel">Loading index data...</div>
+              <div class="wf-skel"></div>
+              <div class="wf-skel"></div>
+            </div>
+          </div>
+          <div class="wf-card">
+            <div class="wf-card-head">Watchlist (Top Movers)</div>
+            <div class="wf-grid-3" id="watchlist-grid">
+              <!-- stock cards injected here -->
+            </div>
+          </div>
+        </div>
+        <div class="wf-col-4">
+          <div class="wf-card">
+            <div class="wf-card-head">Live Alerts</div>
+            <ul class="wf-list" id="live-alerts">
+              <li class="wf-skel">Listening for alerts...</li>
+            </ul>
+          </div>
+          <div class="wf-card">
+            <div class="wf-card-head">News Sentiment Stream</div>
+            <div id="news-stream" class="wf-stack">
+              <div class="wf-skel">Loading latest headlines...</div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+    <footer class="wf-footer">
+  <div class="wf-container">
+    <div>© 2025 NSE Monitor (Wireframe). <span id="telegram-status" class="wf-tag">Telegram: not linked</span></div>
+  </div>
+</footer>
+
+  </body>
+</html>

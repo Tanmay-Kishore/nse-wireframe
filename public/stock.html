@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en" data-page="stock">
+  <head>
+    <meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>NSE Stocks Monitor · Wireframe</title>
+<link rel="stylesheet" href="/assets/css/styles.css" />
+<script defer src="/assets/js/app.js"></script>
+
+  </head>
+  <body>
+    <header class="wf-header">
+  <div class="wf-container">
+    <div class="wf-brand"><a href="/index.html">NSE Monitor</a><span class="wf-badge">wireframe</span></div>
+    <nav class="wf-nav">
+      <a href="/index.html" data-nav="overview">Overview</a>
+      <a href="/screener.html" data-nav="screener">Screener</a>
+      <a href="/stock.html" data-nav="stock">Stock Detail</a>
+      <a href="/alerts.html" data-nav="alerts">Alerts</a>
+      <a href="/journal.html" data-nav="journal">Journal</a>
+      <a href="/settings.html" data-nav="settings">Settings</a>
+    </nav>
+  </div>
+</header>
+
+    <main class="wf-container wf-main">
+      <div class="wf-card">
+        <div class="wf-card-head">
+          <span id="stock-title">Stock Detail</span>
+          <span id="realtime-badge" class="wf-tag">RT: connecting...</span>
+        </div>
+        <div class="wf-row">
+          <div class="wf-col-6">
+            <div class="wf-keygrid" id="stock-metrics">
+              <div class="wf-skel">Loading stock...</div>
+            </div>
+            <div class="wf-note">Signals (wireframe): Entry / SL / Target are placeholders.</div>
+          </div>
+          <div class="wf-col-6">
+            <div class="wf-chart wf-skel">Chart placeholder</div>
+            <div class="wf-hint">A real candlestick chart can be embedded later.</div>
+          </div>
+        </div>
+      </div>
+      <div class="wf-card">
+        <div class="wf-card-head">Recent Alerts</div>
+        <ul class="wf-list" id="stock-alerts">
+          <li class="wf-skel">No alerts yet</li>
+        </ul>
+      </div>
+    </main>
+    <footer class="wf-footer">
+  <div class="wf-container">
+    <div>© 2025 NSE Monitor (Wireframe). <span id="telegram-status" class="wf-tag">Telegram: not linked</span></div>
+  </div>
+</footer>
+
+  </body>
+</html>
