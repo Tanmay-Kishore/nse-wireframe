@@ -17,6 +17,15 @@ except ImportError:
 
 app = FastAPI(title="NSE Monitor Wireframe")
 
+# Auto-start Telegram bot if configured
+@app.on_event("startup")
+async def startup_event():
+    try:
+        from services.telegram_bot import start_telegram_bot_if_configured
+        await start_telegram_bot_if_configured()
+    except Exception as e:
+        print(f"Warning: Could not auto-start Telegram bot: {e}")
+
 # CORS (adjust as needed)
 app.add_middleware(
     CORSMiddleware,

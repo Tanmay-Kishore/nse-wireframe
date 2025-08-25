@@ -156,16 +156,12 @@ function renderSettings() {
   console.log("renderSettings called");
   loadSettingsData();
   setupUpstoxModal();
+  setupTelegramModal();
   
   const saveBtn = document.getElementById("save-settings");
-  const telegramBtn = document.getElementById("link-telegram");
   
   if (saveBtn) {
     saveBtn.addEventListener("click", () => alert("Saved (wireframe)"));
-  }
-  
-  if (telegramBtn) {
-    telegramBtn.addEventListener("click", () => alert("Link flow (wireframe)"));
   }
   
   // Remove any old event listeners and add fresh ones
@@ -201,6 +197,12 @@ async function loadSettingsData() {
     const telegramStatus = document.getElementById("telegram-status");
     if (telegramStatus) {
       telegramStatus.textContent = `Telegram: ${s.telegram_linked ? "linked" : "not linked"}`;
+    }
+    
+    // Update Telegram button
+    const telegramBtn = document.getElementById("link-telegram");
+    if (telegramBtn) {
+      telegramBtn.textContent = s.telegram_linked ? "Reconfigure" : "Link";
     }
     
     // Update Upstox status
@@ -374,6 +376,180 @@ function setupUpstoxModal() {
         } catch (error) {
           alert(`Network error: ${error.message}`);
         }
+      }
+    });
+  }
+
+  // Close modal on outside click
+  if (modal) {
+    modal.addEventListener("click", (e) => {
+      if (e.target === modal) {
+        closeModal();
+      }
+    });
+  }
+}
+
+function setupTelegramModal() {
+  console.log("Setting up Telegram modal...");
+  
+  const modal = document.getElementById("telegram-modal");
+  const telegramBtn = document.getElementById("link-telegram");
+  const closeBtn = document.getElementById("close-telegram-modal");
+  const cancelBtn = document.getElementById("cancel-telegram");
+  const saveBtn = document.getElementById("save-telegram");
+  const disconnectBtn = document.getElementById("disconnect-telegram");
+  const testBtn = document.getElementById("test-telegram");
+
+  console.log("Telegram modal elements:", {
+    modal: !!modal,
+    telegramBtn: !!telegramBtn,
+    closeBtn: !!closeBtn,
+    cancelBtn: !!cancelBtn,
+    saveBtn: !!saveBtn,
+    disconnectBtn: !!disconnectBtn,
+    testBtn: !!testBtn
+  });
+
+  if (!modal || !telegramBtn) {
+    console.error("Required Telegram modal elements not found!");
+    return;
+  }
+
+  const botTokenInput = document.getElementById("bot-token");
+  const chatIdInput = document.getElementById("chat-id");
+
+  function closeModal() {
+    modal.classList.remove("show");
+    setTimeout(() => {
+      modal.style.display = "none";
+      // Clear form
+      if (botTokenInput) botTokenInput.value = "";
+      if (chatIdInput) chatIdInput.value = "";
+      // Hide disconnect button
+      if (disconnectBtn) disconnectBtn.style.display = "none";
+    }, 300);
+  }
+
+  // Open modal
+  telegramBtn.addEventListener("click", async (e) => {
+    e.preventDefault();
+    console.log("Telegram button clicked!");
+    
+    try {
+      // Check current status
+      const status = await getJSON("/settings/telegram/status");
+      console.log("Telegram status:", status);
+      
+      if (status.connected) {
+        // Show disconnect and test buttons for existing config
+        if (disconnectBtn) disconnectBtn.style.display = "inline-block";
+        if (testBtn) testBtn.style.display = "inline-block";
+      } else {
+        // Hide disconnect and test buttons for new config
+        if (disconnectBtn) disconnectBtn.style.display = "none";
+        if (testBtn) testBtn.style.display = "none";
+      }
+      
+      // Show modal
+      modal.style.display = "flex";
+      setTimeout(() => modal.classList.add("show"), 10);
+    } catch (error) {
+      console.error("Error checking Telegram status:", error);
+      modal.style.display = "flex";
+      setTimeout(() => modal.classList.add("show"), 10);
+    }
+  });
+
+  // Close buttons
+  if (closeBtn) {
+    closeBtn.addEventListener("click", closeModal);
+  }
+  if (cancelBtn) {
+    cancelBtn.addEventListener("click", closeModal);
+  }
+
+  // Save configuration
+  if (saveBtn) {
+    saveBtn.addEventListener("click", async () => {
+      const botToken = botTokenInput?.value.trim();
+      const chatId = chatIdInput?.value.trim();
+
+      if (!botToken || !chatId) {
+        alert("Please fill in all required fields");
+        return;
+      }
+
+      try {
+        const response = await fetch("/api/settings/telegram", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            bot_token: botToken,
+            chat_id: chatId,
+          }),
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+          alert("Telegram configuration saved successfully!");
+          closeModal();
+          loadSettingsData(); // Refresh status
+        } else {
+          alert(`Error: ${result.detail}`);
+        }
+      } catch (error) {
+        console.error("Network error:", error);
+        alert(`Network error: ${error.message}`);
+      }
+    });
+  }
+
+  // Disconnect
+  if (disconnectBtn) {
+    disconnectBtn.addEventListener("click", async () => {
+      if (confirm("Are you sure you want to disconnect Telegram?")) {
+        try {
+          const response = await fetch("/api/settings/telegram", {
+            method: "DELETE",
+          });
+
+          const result = await response.json();
+
+          if (response.ok) {
+            alert("Telegram disconnected successfully!");
+            closeModal();
+            loadSettingsData(); // Refresh status
+          } else {
+            alert(`Error: ${result.detail}`);
+          }
+        } catch (error) {
+          alert(`Network error: ${error.message}`);
+        }
+      }
+    });
+  }
+
+  // Test message
+  if (testBtn) {
+    testBtn.addEventListener("click", async () => {
+      try {
+        const response = await fetch("/api/settings/telegram/test", {
+          method: "POST",
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+          alert("Test message sent! Check your Telegram chat.");
+        } else {
+          alert(`Error: ${result.detail}`);
+        }
+      } catch (error) {
+        alert(`Network error: ${error.message}`);
       }
     });
   }

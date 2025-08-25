@@ -76,6 +76,34 @@
         </div>
       </div>
 
+      <!-- Telegram Configuration Modal (hidden by default) -->
+      <div id="telegram-modal" class="wf-modal">
+        <div class="wf-modal-content">
+          <div class="wf-modal-header">
+            <h3>Telegram Bot Configuration</h3>
+            <button id="close-telegram-modal" class="wf-modal-close">&times;</button>
+          </div>
+          <div class="wf-modal-body">
+            <div class="wf-form-group">
+              <label for="bot-token">Bot Token *</label>
+              <input id="bot-token" class="wf-input" type="text" placeholder="Enter your Telegram bot token..." />
+              <div class="wf-help">Get token from @BotFather on Telegram by creating a new bot.</div>
+            </div>
+            <div class="wf-form-group">
+              <label for="chat-id">Chat ID *</label>
+              <input id="chat-id" class="wf-input" type="text" placeholder="Your chat ID or group ID" />
+              <div class="wf-help">Send any message to your bot and it will reply with your chat ID, or use @userinfobot.</div>
+            </div>
+            <div class="wf-modal-actions">
+              <button id="save-telegram" class="wf-btn wf-btn-primary">Save Configuration</button>
+              <button id="disconnect-telegram" class="wf-btn wf-btn-danger" style="display: none;">Disconnect</button>
+              <button id="test-telegram" class="wf-btn" style="display: none;">Send Test Message</button>
+              <button id="cancel-telegram" class="wf-btn">Cancel</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="wf-card">
         <div class="wf-card-head">Alert Thresholds</div>
         <div class="wf-filters">
