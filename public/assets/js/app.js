@@ -153,21 +153,268 @@ function renderJournal() {
 }
 
 function renderSettings() {
-  getJSON("/settings").then(s => {
-    document.getElementById("telegram-status").textContent = `Telegram: ${s.telegram_linked ? "linked" : "not linked"}`;
+  console.log("renderSettings called");
+  loadSettingsData();
+  setupUpstoxModal();
+  
+  const saveBtn = document.getElementById("save-settings");
+  const telegramBtn = document.getElementById("link-telegram");
+  
+  if (saveBtn) {
+    saveBtn.addEventListener("click", () => alert("Saved (wireframe)"));
+  }
+  
+  if (telegramBtn) {
+    telegramBtn.addEventListener("click", () => alert("Link flow (wireframe)"));
+  }
+  
+  // Remove any old event listeners and add fresh ones
+  const configBtn = document.getElementById("upstox-config");
+  if (configBtn) {
+    // Clone node to remove all event listeners
+    const newConfigBtn = configBtn.cloneNode(true);
+    configBtn.parentNode.replaceChild(newConfigBtn, configBtn);
+    
+    // Add fresh event listener
+    newConfigBtn.addEventListener("click", (e) => {
+      console.log("NEW Configure button clicked!");
+      e.preventDefault();
+      const modal = document.getElementById("upstox-modal");
+      if (modal) {
+        // Show modal with animation
+        modal.style.display = "flex";
+        setTimeout(() => modal.classList.add("show"), 10);
+        console.log("Modal should be visible now");
+      } else {
+        console.error("Modal element not found!");
+      }
+    });
+  }
+}
+
+async function loadSettingsData() {
+  try {
+    console.log("Loading settings data...");
+    const s = await getJSON("/settings");
+    console.log("Settings data:", s);
+    
+    const telegramStatus = document.getElementById("telegram-status");
+    if (telegramStatus) {
+      telegramStatus.textContent = `Telegram: ${s.telegram_linked ? "linked" : "not linked"}`;
+    }
+    
+    // Update Upstox status
+    const statusEl = document.getElementById("upstox-status");
+    const configBtn = document.getElementById("upstox-config");
+    
+    if (statusEl && configBtn) {
+      if (s.upstox_connected) {
+        const expiryDate = new Date(s.upstox_token_expiry).toLocaleDateString();
+        statusEl.innerHTML = `<span class="wf-status-indicator connected">Connected</span> Token expires: ${expiryDate}`;
+        configBtn.textContent = "Reconfigure";
+      } else {
+        statusEl.innerHTML = `<span class="wf-status-indicator disconnected">Not Connected</span> Configure for real-time market data`;
+        configBtn.textContent = "Configure";
+      }
+    }
+  } catch (error) {
+    console.error("Error loading settings:", error);
+  }
+}
+
+function setupUpstoxModal() {
+  console.log("Setting up Upstox modal...");
+  
+  const modal = document.getElementById("upstox-modal");
+  const configBtn = document.getElementById("upstox-config");
+  const closeBtn = document.getElementById("close-modal");
+  const cancelBtn = document.getElementById("cancel-upstox");
+  const saveBtn = document.getElementById("save-upstox");
+  const disconnectBtn = document.getElementById("disconnect-upstox");
+
+  console.log("Modal elements:", {
+    modal: !!modal,
+    configBtn: !!configBtn,
+    closeBtn: !!closeBtn,
+    cancelBtn: !!cancelBtn,
+    saveBtn: !!saveBtn,
+    disconnectBtn: !!disconnectBtn
   });
-  document.getElementById("save-settings").addEventListener("click", () => alert("Saved (wireframe)"));
-  document.getElementById("link-telegram").addEventListener("click", () => alert("Link flow (wireframe)"));
-  document.getElementById("upstox-config").addEventListener("click", () => alert("Upstox config (wireframe)"));
+
+  if (!modal || !configBtn) {
+    console.error("Required modal elements not found!");
+    return;
+  }
+
+  // Open modal
+  configBtn.addEventListener("click", async (e) => {
+    console.log("Configure button clicked!");
+    e.preventDefault();
+    
+    // Simple test - just show alert first
+    alert("Button clicked! Modal should open now...");
+    
+    modal.style.display = "flex";
+    console.log("Modal display set to flex");
+    
+    // Check if already configured
+    try {
+      const status = await getJSON("/settings/upstox/status");
+      if (status.connected && disconnectBtn) {
+        disconnectBtn.style.display = "inline-block";
+      }
+    } catch (error) {
+      console.log("Not configured yet");
+    }
+  });
+
+  // Close modal function
+  const closeModal = () => {
+    console.log("Closing modal...");
+    if (modal) {
+      modal.classList.remove("show");
+      setTimeout(() => {
+        modal.style.display = "none";
+      }, 300);
+    }
+    
+    // Clear form
+    const accessToken = document.getElementById("access-token");
+    const apiKey = document.getElementById("api-key");
+    const apiSecret = document.getElementById("api-secret");
+    
+    if (accessToken) accessToken.value = "";
+    if (apiKey) apiKey.value = "";
+    if (apiSecret) apiSecret.value = "";
+    
+    if (disconnectBtn) {
+      disconnectBtn.style.display = "none";
+    }
+  };
+
+  // Close button events
+  if (closeBtn) {
+    closeBtn.addEventListener("click", closeModal);
+  }
+  
+  if (cancelBtn) {
+    cancelBtn.addEventListener("click", closeModal);
+  }
+
+  // Save configuration
+  if (saveBtn) {
+    saveBtn.addEventListener("click", async () => {
+      console.log("Save button clicked!");
+      
+      const accessTokenEl = document.getElementById("access-token");
+      const apiKeyEl = document.getElementById("api-key");
+      const apiSecretEl = document.getElementById("api-secret");
+      
+      if (!accessTokenEl) {
+        alert("Form elements not found!");
+        return;
+      }
+      
+      const accessToken = accessTokenEl.value.trim();
+      
+      if (!accessToken) {
+        alert("Access token is required!");
+        return;
+      }
+
+      try {
+        console.log("Sending configuration...");
+        const response = await fetch("/api/settings/upstox", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            access_token: accessToken,
+            api_key: apiKeyEl ? apiKeyEl.value.trim() : "",
+            api_secret: apiSecretEl ? apiSecretEl.value.trim() : "",
+          }),
+        });
+
+        const result = await response.json();
+        console.log("Response:", result);
+
+        if (response.ok) {
+          alert("Upstox configuration saved successfully!");
+          closeModal();
+          loadSettingsData(); // Refresh status
+        } else {
+          alert(`Error: ${result.detail}`);
+        }
+      } catch (error) {
+        console.error("Network error:", error);
+        alert(`Network error: ${error.message}`);
+      }
+    });
+  }
+
+  // Disconnect
+  if (disconnectBtn) {
+    disconnectBtn.addEventListener("click", async () => {
+      if (confirm("Are you sure you want to disconnect Upstox?")) {
+        try {
+          const response = await fetch("/api/settings/upstox", {
+            method: "DELETE",
+          });
+
+          const result = await response.json();
+
+          if (response.ok) {
+            alert("Upstox disconnected successfully!");
+            closeModal();
+            loadSettingsData(); // Refresh status
+          } else {
+            alert(`Error: ${result.detail}`);
+          }
+        } catch (error) {
+          alert(`Network error: ${error.message}`);
+        }
+      }
+    });
+  }
+
+  // Close modal on outside click
+  if (modal) {
+    modal.addEventListener("click", (e) => {
+      if (e.target === modal) {
+        closeModal();
+      }
+    });
+  }
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+  console.log("DOM Content Loaded - JavaScript executing...");
   setActiveNav();
   const page = document.documentElement.getAttribute("data-page");
+  console.log("Current page:", page);
+  
   if (page === "overview") renderOverview();
   if (page === "screener") renderScreener();
   if (page === "stock") renderStock();
   if (page === "alerts") renderAlerts();
   if (page === "journal") renderJournal();
-  if (page === "settings") renderSettings();
+  if (page === "settings") {
+    console.log("Loading settings page...");
+    renderSettings();
+  }
+});
+
+// Add window load event as backup
+window.addEventListener("load", () => {
+  console.log("Window loaded - backup initialization");
+  const page = document.documentElement.getAttribute("data-page");
+  if (page === "settings") {
+    // Double check that settings is loaded
+    const configBtn = document.getElementById("upstox-config");
+    console.log("Settings page - config button found:", !!configBtn);
+    if (!configBtn) {
+      console.error("Configure button not found after window load!");
+    }
+  }
 });

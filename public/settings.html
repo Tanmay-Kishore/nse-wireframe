@@ -36,13 +36,46 @@
           </div>
           <div class="wf-integration">
             <div>
-              <div class="wf-title">Upstox</div>
-              <div class="wf-subtle">Real-time feed via API/WebSocket.</div>
+              <div class="wf-title">Upstox API</div>
+              <div class="wf-subtle" id="upstox-status">Configure for real-time market data.</div>
             </div>
             <button id="upstox-config" class="wf-btn">Configure</button>
           </div>
         </div>
       </div>
+
+      <!-- Upstox Configuration Modal (hidden by default) -->
+      <div id="upstox-modal" class="wf-modal">
+        <div class="wf-modal-content">
+          <div class="wf-modal-header">
+            <h3>Upstox API Configuration</h3>
+            <button id="close-modal" class="wf-modal-close">&times;</button>
+          </div>
+          <div class="wf-modal-body">
+            <div class="wf-form-group">
+              <label for="access-token">Access Token *</label>
+              <textarea id="access-token" class="wf-input" placeholder="Enter your Upstox access token here..." rows="3"></textarea>
+              <div class="wf-help">Token expires daily at market close. Get new token from Upstox API console.</div>
+            </div>
+            <div class="wf-form-group">
+              <label for="api-key">API Key (Optional)</label>
+              <input id="api-key" class="wf-input" type="text" placeholder="Your Upstox API Key" />
+              <div class="wf-help">Required for some advanced features.</div>
+            </div>
+            <div class="wf-form-group">
+              <label for="api-secret">API Secret (Optional)</label>
+              <input id="api-secret" class="wf-input" type="password" placeholder="Your Upstox API Secret" />
+              <div class="wf-help">Keep this secure. Used for order placement.</div>
+            </div>
+            <div class="wf-modal-actions">
+              <button id="save-upstox" class="wf-btn wf-btn-primary">Save Configuration</button>
+              <button id="disconnect-upstox" class="wf-btn wf-btn-danger" style="display: none;">Disconnect</button>
+              <button id="cancel-upstox" class="wf-btn">Cancel</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="wf-card">
         <div class="wf-card-head">Alert Thresholds</div>
         <div class="wf-filters">
