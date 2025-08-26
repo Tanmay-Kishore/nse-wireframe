@@ -195,7 +195,7 @@ async function loadSettingsData() {
       if (s.telegram_linked) {
         telegramStatusEl.innerHTML = `<span class="wf-status-indicator connected">Connected - Alerts Active</span> Bot ready to send notifications`;
       } else {
-        telegramStatusEl.innerHTML = `Send alerts to your chat.`;
+        telegramStatusEl.innerHTML = `<span class="wf-status-indicator disconnected">Not Connected - No Alerts</span> Click 'Link' to connect & receive notifications`;
       }
     }
     

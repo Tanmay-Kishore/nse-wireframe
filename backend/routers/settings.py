@@ -107,9 +107,9 @@ async def get_settings():
 async def configure_upstox(config: UpstoxConfig):
     """Configure Upstox API settings"""
     try:
-        # Calculate expiry date (Upstox tokens expire next day at market close)
+        # Calculate expiry date (Upstox tokens expire next day at 3:30 AM)
         tomorrow = datetime.now() + timedelta(days=1)
-        expiry_time = tomorrow.replace(hour=15, minute=30, second=0, microsecond=0)  # 3:30 PM next day
+        expiry_time = tomorrow.replace(hour=3, minute=30, second=0, microsecond=0)  # 3:30 AM next day
         
         config_data = {
             "access_token": config.access_token,
