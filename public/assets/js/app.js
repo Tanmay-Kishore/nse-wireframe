@@ -205,9 +205,10 @@ async function loadSettingsData() {
     
     if (statusEl && configBtn) {
       if (s.upstox_connected) {
-        const expiryDate = new Date(s.upstox_token_expiry).toLocaleDateString();
-        statusEl.innerHTML = `<span class="wf-status-indicator connected">Connected - Real Data</span> Token expires: ${expiryDate}`;
-        configBtn.textContent = "Reconfigure";
+      const expiry = new Date(s.upstox_token_expiry);
+      const expiryDate = expiry.toLocaleDateString() + " " + expiry.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+      statusEl.innerHTML = `<span class="wf-status-indicator connected">Connected - Real Data</span> Token expires: ${expiryDate}`;
+      configBtn.textContent = "Reconfigure";
       } else {
         statusEl.innerHTML = `<span class="wf-status-indicator disconnected">Not Connected - Mock Data</span> Configure for real-time market data`;
         configBtn.textContent = "Configure";
@@ -598,48 +599,7 @@ function setupTelegramModal() {
   }
 }
 
-// Alert/notification function
-function showAlert(message, type = "info") {
-  // Create alert element using your existing design system
-  const alert = document.createElement("div");
-  alert.className = "wf-alert";
-  
-  // Add type-specific styling that matches your CSS variables
-  if (type === "success") {
-    alert.style.borderColor = "var(--buy)"; // Green border only
-    alert.style.color = "var(--text)"; // Keep text in default color
-  } else if (type === "error") {
-    alert.style.borderColor = "var(--sell)"; // Red border
-    alert.style.color = "var(--sell)"; // Red text for errors
-  } else {
-    alert.style.borderColor = "var(--outline)"; // Default border
-    alert.style.color = "var(--text)";
-  }
-  
-  // Position as toast notification
-  alert.style.cssText += `
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    background: var(--card);
-    z-index: 1000;
-    max-width: 300px;
-    word-wrap: break-word;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-  `;
-  
-  alert.textContent = message;
-  
-  // Add to page
-  document.body.appendChild(alert);
-  
-  // Remove after 3 seconds
-  setTimeout(() => {
-    if (alert && alert.parentNode) {
-      alert.parentNode.removeChild(alert);
-    }
-  }, 3000);
-}
+
 
 // Threshold management functions
 async function saveThresholds() {
@@ -648,7 +608,7 @@ async function saveThresholds() {
     const rsiInput = document.getElementById("th-rsi");
     
     if (!gapInput || !rsiInput) {
-      showAlert("Threshold input fields not found", "error");
+    alert("Threshold input fields not found");
       return;
     }
     
@@ -657,12 +617,12 @@ async function saveThresholds() {
     
     // Validation
     if (isNaN(gap) || gap <= 0 || gap > 100) {
-      showAlert("Gap % must be a number between 0 and 100", "error");
+    alert("Gap % must be a number between 0 and 100");
       return;
     }
     
     if (isNaN(rsi) || rsi < 1 || rsi > 100) {
-      showAlert("RSI must be a number between 1 and 100", "error");
+    alert("RSI must be a number between 1 and 100");
       return;
     }
     
@@ -680,13 +640,13 @@ async function saveThresholds() {
     const result = await response.json();
     
     if (response.ok) {
-      showAlert("Threshold settings saved successfully!", "success");
+    alert("Threshold settings saved successfully!");
     } else {
-      showAlert(result.detail || "Failed to save threshold settings", "error");
+    alert(result.detail || "Failed to save threshold settings");
     }
   } catch (error) {
     console.error("Error saving thresholds:", error);
-    showAlert("Error saving threshold settings", "error");
+    alert("Error saving threshold settings");
   }
 }
 
