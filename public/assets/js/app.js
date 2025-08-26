@@ -53,17 +53,21 @@ function renderOverview() {
     ul.innerHTML = data.items.map(a => `<li class="wf-alert ${a.severity}"><div><strong>${a.symbol}</strong> ${a.message}</div><div class="wf-tag">${new Date(a.ts).toLocaleTimeString()}</div></li>`).join("");
   }).catch(console.error);
 
-  // Market snapshot placeholder
+  // Market snapshot: NIFTY top gainers
   const ms = document.getElementById("market-snapshot");
   if (ms) {
-    ms.innerHTML = [0,1,2].map(i => `<div class="wf-stock-card">
-      <div class="wf-stock-head"><div><strong>${i===0?"NIFTY 50": i===1?"BANK NIFTY":"INDIA VIX"}</strong></div><div class="wf-tag">index</div></div>
-      <div class="wf-metrics">
-        <div class="wf-kv"><span>Last</span><span>${(18000 + Math.random()*500).toFixed(2)}</span></div>
-        <div class="wf-kv"><span>Change</span><span>${(Math.random()*2-1).toFixed(2)}%</span></div>
-        <div class="wf-kv"><span>Vol</span><span>${(Math.random()*1e7|0)}</span></div>
-      </div>
-    </div>`).join("");
+    getJSON("/nifty-gainers").then(data => {
+      ms.innerHTML = data.slice(0, 3).map(g => `<div class="wf-stock-card">
+        <div class="wf-stock-head"><div><strong>${g.symbol}</strong></div><div class="wf-tag">Gainer</div></div>
+        <div class="wf-metrics">
+          <div class="wf-kv"><span>Last</span><span>${g.ltp}</span></div>
+          <div class="wf-kv"><span>Change</span><span>${g.perChange}%</span></div>
+          <div class="wf-kv"><span>Vol</span><span>${g.trade_quantity}</span></div>
+        </div>
+      </div>`).join("");
+    }).catch(() => {
+      ms.innerHTML = '<div class="wf-skel">Could not load NIFTY gainers.</div>';
+    });
   }
 
   // News sentiment placeholder
