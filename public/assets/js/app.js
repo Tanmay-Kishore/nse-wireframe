@@ -153,46 +153,22 @@ function renderJournal() {
 }
 
 function renderSettings() {
-  console.log("renderSettings called");
-  loadSettingsData();
-  setupUpstoxModal();
-  setupTelegramModal();
+  loadSettingsData().then(() => {
+    // Setup modals after settings are loaded
+    setupUpstoxModal();
+    setupTelegramModal();
+  });
   
   const saveBtn = document.getElementById("save-settings");
   
   if (saveBtn) {
     saveBtn.addEventListener("click", () => alert("Saved (wireframe)"));
   }
-  
-  // Remove any old event listeners and add fresh ones
-  const configBtn = document.getElementById("upstox-config");
-  if (configBtn) {
-    // Clone node to remove all event listeners
-    const newConfigBtn = configBtn.cloneNode(true);
-    configBtn.parentNode.replaceChild(newConfigBtn, configBtn);
-    
-    // Add fresh event listener
-    newConfigBtn.addEventListener("click", (e) => {
-      console.log("NEW Configure button clicked!");
-      e.preventDefault();
-      const modal = document.getElementById("upstox-modal");
-      if (modal) {
-        // Show modal with animation
-        modal.style.display = "flex";
-        setTimeout(() => modal.classList.add("show"), 10);
-        console.log("Modal should be visible now");
-      } else {
-        console.error("Modal element not found!");
-      }
-    });
-  }
 }
 
 async function loadSettingsData() {
   try {
-    console.log("Loading settings data...");
     const s = await getJSON("/settings");
-    console.log("Settings data:", s);
     
     const telegramStatus = document.getElementById("telegram-status");
     if (telegramStatus) {
@@ -212,10 +188,10 @@ async function loadSettingsData() {
     if (statusEl && configBtn) {
       if (s.upstox_connected) {
         const expiryDate = new Date(s.upstox_token_expiry).toLocaleDateString();
-        statusEl.innerHTML = `<span class="wf-status-indicator connected">Connected</span> Token expires: ${expiryDate}`;
+        statusEl.innerHTML = `<span class="wf-status-indicator connected">Connected - Real Data</span> Token expires: ${expiryDate}`;
         configBtn.textContent = "Reconfigure";
       } else {
-        statusEl.innerHTML = `<span class="wf-status-indicator disconnected">Not Connected</span> Configure for real-time market data`;
+        statusEl.innerHTML = `<span class="wf-status-indicator disconnected">Not Connected - Mock Data</span> Configure for real-time market data`;
         configBtn.textContent = "Configure";
       }
     }
@@ -225,54 +201,71 @@ async function loadSettingsData() {
 }
 
 function setupUpstoxModal() {
-  console.log("Setting up Upstox modal...");
-  
   const modal = document.getElementById("upstox-modal");
   const configBtn = document.getElementById("upstox-config");
   const closeBtn = document.getElementById("close-modal");
   const cancelBtn = document.getElementById("cancel-upstox");
   const saveBtn = document.getElementById("save-upstox");
   const disconnectBtn = document.getElementById("disconnect-upstox");
-
-  console.log("Modal elements:", {
-    modal: !!modal,
-    configBtn: !!configBtn,
-    closeBtn: !!closeBtn,
-    cancelBtn: !!cancelBtn,
-    saveBtn: !!saveBtn,
-    disconnectBtn: !!disconnectBtn
-  });
+  const testBtn = document.getElementById("test-upstox");
 
   if (!modal || !configBtn) {
-    console.error("Required modal elements not found!");
+    return;
+  }
+
+  // Prevent duplicate event listeners
+  if (configBtn.dataset.listenerAttached === "true") {
     return;
   }
 
   // Open modal
   configBtn.addEventListener("click", async (e) => {
-    console.log("Configure button clicked!");
     e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
     
-    // Simple test - just show alert first
-    alert("Button clicked! Modal should open now...");
+    // Set a flag to prevent immediate closing
+    window.modalJustOpened = true;
     
+    // Show modal with proper CSS classes
     modal.style.display = "flex";
-    console.log("Modal display set to flex");
+    modal.classList.add("show");
+    
+    // Clear the flag after a short delay
+    setTimeout(() => {
+      window.modalJustOpened = false;
+    }, 500);
+    
+    // Show buttons if Upstox is connected
+    if (disconnectBtn) {
+      disconnectBtn.style.display = "inline-block";
+    }
+    if (testBtn) {
+      testBtn.style.display = "inline-block";
+    }
     
     // Check if already configured
     try {
-      const status = await getJSON("/settings/upstox/status");
-      if (status.connected && disconnectBtn) {
-        disconnectBtn.style.display = "inline-block";
+      const settings = await getJSON("/settings");
+      if (!settings.upstox_connected) {
+        if (disconnectBtn) disconnectBtn.style.display = "none";
+        if (testBtn) testBtn.style.display = "none";
       }
     } catch (error) {
-      console.log("Not configured yet");
+      // Keep buttons visible on error
     }
   });
 
+  // Mark event listener as attached
+  configBtn.dataset.listenerAttached = "true";
+
   // Close modal function
   const closeModal = () => {
-    console.log("Closing modal...");
+    // Prevent closing if modal was just opened
+    if (window.modalJustOpened) {
+      return;
+    }
+    
     if (modal) {
       modal.classList.remove("show");
       setTimeout(() => {
@@ -380,10 +373,33 @@ function setupUpstoxModal() {
     });
   }
 
+  // Test connection
+  if (testBtn) {
+    testBtn.addEventListener("click", async () => {
+      try {
+        const response = await fetch("/api/settings/upstox/test", {
+          method: "POST",
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+          alert(`✅ Connection successful!\n\nUser: ${result.user_name || 'Unknown'}\nBroker: ${result.broker || 'Unknown'}\n\nUpstox API is working correctly!`);
+        } else {
+          alert(`❌ Connection failed!\n\n${result.message || 'Unknown error'}\n\nPlease check your access token.`);
+        }
+      } catch (error) {
+        alert(`❌ Network error: ${error.message}`);
+      }
+    });
+  }
+
   // Close modal on outside click
   if (modal) {
     modal.addEventListener("click", (e) => {
-      if (e.target === modal) {
+      // Only close if clicking the modal backdrop (not the content)
+      // AND the modal wasn't just opened
+      if (e.target === modal && !window.modalJustOpened) {
         closeModal();
       }
     });

@@ -115,6 +115,13 @@ async def configure_upstox(config: UpstoxConfig):
         }
         
         if save_upstox_config(config_data):
+            # Refresh the Upstox service with new config
+            try:
+                from services.upstox_service import refresh_upstox_config
+                refresh_upstox_config()
+            except Exception as e:
+                print(f"Warning: Could not refresh Upstox service: {e}")
+            
             return {
                 "success": True, 
                 "message": "Upstox configuration saved successfully",
@@ -125,6 +132,62 @@ async def configure_upstox(config: UpstoxConfig):
             
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Configuration error: {str(e)}")
+
+@router.post("/settings/upstox/test")
+async def test_upstox_connection():
+    """Test Upstox API connection"""
+    try:
+        from services.upstox_service import get_upstox_service
+        upstox = get_upstox_service()
+        
+        if not upstox.is_configured():
+            raise HTTPException(status_code=400, detail="Upstox not configured")
+        
+        result = upstox.test_connection()
+        
+        if result.get("success"):
+            return {
+                "success": True,
+                "message": "Upstox connection test successful",
+                "user_name": result.get("user_name"),
+                "broker": result.get("broker")
+            }
+        else:
+            return {
+                "success": False,
+                "message": result.get("message", "Connection test failed")
+            }
+            
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Connection test error: {str(e)}")
+
+@router.get("/settings/upstox/quote/{symbol}")
+async def get_upstox_quote(symbol: str):
+    """Get real-time quote from Upstox for testing"""
+    try:
+        from services.upstox_service import get_upstox_service
+        upstox = get_upstox_service()
+        
+        if not upstox.is_configured():
+            raise HTTPException(status_code=400, detail="Upstox not configured")
+        
+        quote_data = upstox.get_market_quote(symbol.upper())
+        
+        if quote_data:
+            formatted_data = upstox.format_stock_data(symbol.upper(), quote_data)
+            return {
+                "success": True,
+                "data": formatted_data,
+                "raw_data": quote_data
+            }
+        else:
+            return {
+                "success": False,
+                "message": f"No data found for symbol {symbol}"
+            }
+            
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Quote fetch error: {str(e)}")
 
 @router.delete("/settings/upstox")
 async def disconnect_upstox():

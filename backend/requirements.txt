@@ -2,3 +2,5 @@ fastapi
 uvicorn[standard]
 pydantic
 python-telegram-bot
+upstox-python-sdk
+requests
