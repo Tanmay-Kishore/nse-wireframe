@@ -78,7 +78,7 @@ a{color:var(--text);text-decoration:none}
   padding: 8px 0;
 }
 .wf-footer .wf-container {
-  text-align: center;
+  text-align: left;
 }
 .wf-chart{height:220px;border:1px dashed var(--outline);border-radius:12px;display:flex;align-items:center;justify-content:center;color:var(--muted)}
 .wf-hint{color:var(--muted);font-size:12px;margin-top:8px}
