@@ -22,6 +22,9 @@ a{color:var(--text);text-decoration:none}
 .wf-nav a{padding:8px 10px;border-radius:10px;border:1px dashed transparent}
 .wf-nav a.active, .wf-nav a:hover{border-color:var(--outline);background:rgba(255,255,255,0.03)}
 .wf-main{padding-top:18px}
+.wf-main {
+  padding-bottom: 68px;
+}
 .wf-row{display:flex;gap:16px;flex-wrap:wrap}
 .wf-col-8{flex:1 1 65%}
 .wf-col-6{flex:1 1 48%}
