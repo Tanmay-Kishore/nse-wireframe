@@ -183,10 +183,20 @@ async function loadSettingsData() {
       telegramStatus.textContent = `Telegram: ${s.telegram_linked ? "linked" : "not linked"}`;
     }
     
-    // Update Telegram button
+    // Update Telegram button and status
     const telegramBtn = document.getElementById("link-telegram");
+    const telegramStatusEl = document.getElementById("telegram-status");
+    
     if (telegramBtn) {
       telegramBtn.textContent = s.telegram_linked ? "Reconfigure" : "Link";
+    }
+    
+    if (telegramStatusEl) {
+      if (s.telegram_linked) {
+        telegramStatusEl.innerHTML = `<span class="wf-status-indicator connected">Connected - Alerts Active</span> Bot ready to send notifications`;
+      } else {
+        telegramStatusEl.innerHTML = `Send alerts to your chat.`;
+      }
     }
     
     // Update Upstox status
