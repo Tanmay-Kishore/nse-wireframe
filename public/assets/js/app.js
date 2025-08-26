@@ -57,8 +57,8 @@ function renderOverview() {
   const ms = document.getElementById("market-snapshot");
   if (ms) {
     getJSON("/nifty-gainers").then(data => {
-      ms.innerHTML = data.slice(0, 3).map(g => `<div class="wf-stock-card">
-        <div class="wf-stock-head"><div><strong>${g.symbol}</strong></div><div class="wf-tag">Gainer</div></div>
+      ms.innerHTML = data.slice(0, 10).map(g => `<div class="wf-stock-card">
+  <div class="wf-stock-head"><div><strong>${g.symbol}</strong></div><div class="wf-pill buy">Gainer</div></div>
         <div class="wf-metrics">
           <div class="wf-kv"><span>Last</span><span>${g.ltp}</span></div>
           <div class="wf-kv"><span>Change</span><span>${g.perChange}%</span></div>
