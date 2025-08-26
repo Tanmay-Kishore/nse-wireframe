@@ -157,12 +157,20 @@ function renderSettings() {
     // Setup modals after settings are loaded
     setupUpstoxModal();
     setupTelegramModal();
+    // Load threshold values
+    loadThresholds();
   });
   
   const saveBtn = document.getElementById("save-settings");
   
   if (saveBtn) {
-    saveBtn.addEventListener("click", () => alert("Saved (wireframe)"));
+    // Remove any existing event listeners
+    saveBtn.replaceWith(saveBtn.cloneNode(true));
+    const newSaveBtn = document.getElementById("save-settings");
+    
+    newSaveBtn.addEventListener("click", () => {
+      saveThresholds();
+    });
   }
 }
 
@@ -577,6 +585,121 @@ function setupTelegramModal() {
         closeModal();
       }
     });
+  }
+}
+
+// Alert/notification function
+function showAlert(message, type = "info") {
+  // Create alert element using your existing design system
+  const alert = document.createElement("div");
+  alert.className = "wf-alert";
+  
+  // Add type-specific styling that matches your CSS variables
+  if (type === "success") {
+    alert.style.borderColor = "var(--buy)"; // Green border only
+    alert.style.color = "var(--text)"; // Keep text in default color
+  } else if (type === "error") {
+    alert.style.borderColor = "var(--sell)"; // Red border
+    alert.style.color = "var(--sell)"; // Red text for errors
+  } else {
+    alert.style.borderColor = "var(--outline)"; // Default border
+    alert.style.color = "var(--text)";
+  }
+  
+  // Position as toast notification
+  alert.style.cssText += `
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: var(--card);
+    z-index: 1000;
+    max-width: 300px;
+    word-wrap: break-word;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  `;
+  
+  alert.textContent = message;
+  
+  // Add to page
+  document.body.appendChild(alert);
+  
+  // Remove after 3 seconds
+  setTimeout(() => {
+    if (alert && alert.parentNode) {
+      alert.parentNode.removeChild(alert);
+    }
+  }, 3000);
+}
+
+// Threshold management functions
+async function saveThresholds() {
+  try {
+    const gapInput = document.getElementById("th-gap");
+    const rsiInput = document.getElementById("th-rsi");
+    
+    if (!gapInput || !rsiInput) {
+      showAlert("Threshold input fields not found", "error");
+      return;
+    }
+    
+    const gap = parseFloat(gapInput.value);
+    const rsi = parseInt(rsiInput.value);
+    
+    // Validation
+    if (isNaN(gap) || gap <= 0 || gap > 100) {
+      showAlert("Gap % must be a number between 0 and 100", "error");
+      return;
+    }
+    
+    if (isNaN(rsi) || rsi < 1 || rsi > 100) {
+      showAlert("RSI must be a number between 1 and 100", "error");
+      return;
+    }
+    
+    const response = await fetch("/api/settings/thresholds", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        gap: gap,
+        rsi: rsi
+      })
+    });
+    
+    const result = await response.json();
+    
+    if (response.ok) {
+      showAlert("Threshold settings saved successfully!", "success");
+    } else {
+      showAlert(result.detail || "Failed to save threshold settings", "error");
+    }
+  } catch (error) {
+    console.error("Error saving thresholds:", error);
+    showAlert("Error saving threshold settings", "error");
+  }
+}
+
+async function loadThresholds() {
+  try {
+    const response = await fetch("/api/settings/thresholds");
+    const thresholds = await response.json();
+    
+    if (response.ok) {
+      const gapInput = document.getElementById("th-gap");
+      const rsiInput = document.getElementById("th-rsi");
+      
+      if (gapInput) gapInput.value = thresholds.gap || 5.0;
+      if (rsiInput) rsiInput.value = thresholds.rsi || 30;
+    }
+  } catch (error) {
+    console.error("Error loading thresholds:", error);
+    // Set default values if loading fails
+    const gapInput = document.getElementById("th-gap");
+    const rsiInput = document.getElementById("th-rsi");
+    
+    if (gapInput) gapInput.value = 5.0;
+    if (rsiInput) rsiInput.value = 30;
   }
 }
 

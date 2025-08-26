@@ -10,6 +10,7 @@ router = APIRouter(prefix="/api", tags=["settings"])
 # Configuration file paths
 UPSTOX_CONFIG_FILE = os.path.join(os.path.dirname(__file__), "..", "config", "upstox_config.json")
 TELEGRAM_CONFIG_FILE = os.path.join(os.path.dirname(__file__), "..", "config", "telegram_config.json")
+THRESHOLDS_CONFIG_FILE = os.path.join(os.path.dirname(__file__), "..", "config", "thresholds_config.json")
 
 class UpstoxConfig(BaseModel):
     access_token: str
@@ -20,6 +21,10 @@ class TelegramConfig(BaseModel):
     bot_token: str
     chat_id: str
     username: str = ""
+
+class ThresholdConfig(BaseModel):
+    gap: float
+    rsi: int
 
 class Settings(BaseModel):
     telegram_linked: bool = False
@@ -319,3 +324,37 @@ This is a test message to verify your Telegram integration is working correctly.
             
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error sending test message: {str(e)}")
+
+
+@router.post("/settings/thresholds")
+async def save_thresholds(config: ThresholdConfig):
+    """Save threshold configuration."""
+    try:
+        config_data = {
+            "gap": config.gap,
+            "rsi": config.rsi
+        }
+        
+        with open(THRESHOLDS_CONFIG_FILE, 'w') as f:
+            json.dump(config_data, f, indent=2)
+        
+        return {"message": "Threshold configuration saved successfully"}
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error saving threshold configuration: {str(e)}")
+
+
+@router.get("/settings/thresholds")
+async def get_thresholds():
+    """Get threshold configuration."""
+    try:
+        if os.path.exists(THRESHOLDS_CONFIG_FILE):
+            with open(THRESHOLDS_CONFIG_FILE, 'r') as f:
+                config_data = json.load(f)
+            return config_data
+        else:
+            # Return default values
+            return {"gap": 5.0, "rsi": 30}
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error loading threshold configuration: {str(e)}")

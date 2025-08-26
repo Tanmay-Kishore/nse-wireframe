@@ -108,9 +108,18 @@
       <div class="wf-card">
         <div class="wf-card-head">Alert Thresholds</div>
         <div class="wf-filters">
-          <input id="th-gap" class="wf-input" type="number" step="0.1" placeholder="Gap % trigger" />
-          <input id="th-rsi" class="wf-input" type="number" placeholder="RSI trigger" />
-          <button id="save-settings" class="wf-btn">Save</button>
+          <div style="display: flex; flex-direction: column; gap: 4px;">
+            <label for="th-gap" style="font-size: 12px; color: var(--muted);">Gap % Trigger</label>
+            <input id="th-gap" class="wf-input" type="number" step="0.1" placeholder="e.g. 5.0" />
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 4px;">
+            <label for="th-rsi" style="font-size: 12px; color: var(--muted);">RSI Trigger</label>
+            <input id="th-rsi" class="wf-input" type="number" placeholder="e.g. 30" />
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 4px;">
+            <div style="height: 14px;"></div> <!-- Perfect alignment spacer -->
+            <button id="save-settings" class="wf-btn">Save</button>
+          </div>
         </div>
       </div>
     </main>
