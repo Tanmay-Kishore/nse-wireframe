@@ -53,20 +53,32 @@ function renderOverview() {
     ul.innerHTML = data.items.map(a => `<li class="wf-alert ${a.severity}"><div><strong>${a.symbol}</strong> ${a.message}</div><div class="wf-tag">${new Date(a.ts).toLocaleTimeString()}</div></li>`).join("");
   }).catch(console.error);
 
-  // Market snapshot: NIFTY top gainers
+  // Market snapshot: NIFTY top gainers and losers
   const ms = document.getElementById("market-snapshot");
   if (ms) {
-    getJSON("/nifty-gainers").then(data => {
-      ms.innerHTML = data.slice(0, 10).map(g => `<div class="wf-stock-card">
-  <div class="wf-stock-head"><div><strong>${g.symbol}</strong></div><div class="wf-pill buy">Gainer</div></div>
+    getJSON("/nifty-movers").then(data => {
+      let html = '';
+      html += '<div style="grid-column: span 3; font-weight: bold; font-size: 1.1em; margin-bottom: 8px;">Top Gainers</div>';
+      html += data.gainers.slice(0, 10).map(g => `<div class="wf-stock-card">
+        <div class="wf-stock-head"><div><strong>${g.symbol}</strong></div><div class="wf-pill buy">Gainer</div></div>
         <div class="wf-metrics">
           <div class="wf-kv"><span>Last</span><span>${g.ltp}</span></div>
           <div class="wf-kv"><span>Change</span><span>${g.perChange}%</span></div>
           <div class="wf-kv"><span>Vol</span><span>${g.trade_quantity}</span></div>
         </div>
       </div>`).join("");
+      html += '<div style="grid-column: span 3; font-weight: bold; font-size: 1.1em; margin:16px 0 8px 0;">Top Losers</div>';
+      html += data.losers.slice(0, 7).map(l => `<div class="wf-stock-card">
+        <div class="wf-stock-head"><div><strong>${l.symbol}</strong></div><div class="wf-pill sell">Loser</div></div>
+        <div class="wf-metrics">
+          <div class="wf-kv"><span>Last</span><span>${l.ltp}</span></div>
+          <div class="wf-kv"><span>Change</span><span>${l.perChange}%</span></div>
+          <div class="wf-kv"><span>Vol</span><span>${l.trade_quantity}</span></div>
+        </div>
+      </div>`).join("");
+      ms.innerHTML = html;
     }).catch(() => {
-      ms.innerHTML = '<div class="wf-skel">Could not load NIFTY gainers.</div>';
+      ms.innerHTML = '<div class="wf-skel">Could not load NIFTY movers.</div>';
     });
   }
 
