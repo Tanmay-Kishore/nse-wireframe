@@ -1,3 +1,39 @@
+/* Suggestions dropdown styles */
+.wf-suggestions-box {
+  background: #181e2a;
+  opacity: 1;
+  border-radius: 0 0 8px 8px;
+  box-shadow: 0 8px 24px #000a, 0 0 0 1px #222;
+  z-index: 9999;
+  max-height: 160px;
+  overflow-y: auto;
+  border: 1px solid #333;
+  padding: 4px 0;
+  font-size: 0.92em;
+  min-width: 180px;
+}
+.wf-suggestion-item {
+  padding: 6px 12px;
+  cursor: pointer;
+  color: #e5e7eb;
+  font-size: 0.92em;
+  display: flex;
+  align-items: center;
+  transition: background 0.15s;
+}
+.wf-suggestion-item.active {
+  background: #232b3a;
+  color: #fff;
+  font-weight: 700;
+  border-left: 3px solid var(--accent);
+}
+/* Active suggestion highlight for dropdown */
+.wf-suggestion-item.active {
+/* ...existing code... */
+  background: #232b3a;
+  color: #fff;
+  font-weight: 500;
+}
 :root{
   --bg:#0f172a;
   --panel:#111827;

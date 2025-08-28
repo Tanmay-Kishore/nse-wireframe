@@ -25,6 +25,16 @@
 
     <main class="wf-container wf-main">
       <div class="wf-card">
+        <div class="wf-card-head">Search</div>
+        <div class="wf-filters" style="position:relative;">
+          <div class="wf-suggestions-parent" style="position:relative;width:340px;">
+            <input id="q" class="wf-input" type="text" placeholder="Search symbol/name..." style="width:100%;min-width:0;" autocomplete="off" />
+            <div id="search-suggestions" class="wf-suggestions-box" style="display:none;width:100%;position:absolute;top:100%;left:0;"></div>
+          </div>
+          <button id="apply-filters" class="wf-btn">Go</button>
+        </div>
+      </div>
+      <div class="wf-card">
         <div class="wf-card-head">
           <span id="stock-title">Stock Detail</span>
           <span id="realtime-badge" class="wf-tag">RT: connecting...</span>

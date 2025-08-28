@@ -139,71 +139,213 @@ function renderOverview() {
 }
 
 function renderScreener() {
-  const btn = document.getElementById("apply-filters");
   const out = document.getElementById("screener-results");
+
+  function run() {
+    const params = new URLSearchParams();
+    params.set("limit", "30");
+    getJSON(`/stocks?${params.toString()}`).then(data => {
+      out.innerHTML = data.items.map(stockCard).join("");
+    });
+  }
+
+  run();
+}
+
+function renderStock() {
+  // Search bar suggestions logic (older screener style)
   const qInput = document.getElementById("q");
   const suggestionsBox = document.getElementById("search-suggestions");
   let instruments = [];
 
-  // Load instruments.json once
+  // Load instruments.json for suggestions
   fetch("/data/instruments.json")
     .then(res => res.json())
     .then(data => { instruments = data; })
     .catch(() => { instruments = []; });
 
+  let suggestionIndex = -1;
+  let currentSuggestions = [];
+  let suggestionsOpen = false;
+
   function showSuggestions(query) {
     if (!query || !instruments.length) {
       suggestionsBox.style.display = "none";
       suggestionsBox.innerHTML = "";
+      currentSuggestions = [];
+      suggestionIndex = -1;
+      suggestionsOpen = false;
       return;
     }
     const q = query.trim().toLowerCase();
-    // Semantic search: match tradingsymbol or name
     const matches = instruments.filter(inst =>
       inst.tradingsymbol.toLowerCase().includes(q) ||
       (inst.name && inst.name.toLowerCase().includes(q))
     ).slice(0, 8);
+    currentSuggestions = matches;
+    suggestionIndex = matches.length ? 0 : -1;
     if (!matches.length) {
       suggestionsBox.style.display = "none";
       suggestionsBox.innerHTML = "";
+      suggestionsOpen = false;
       return;
     }
-    suggestionsBox.innerHTML = matches.map(inst =>
-      `<div class="wf-suggestion-item" data-symbol="${inst.tradingsymbol}">
-        <strong>${inst.tradingsymbol}</strong> <span style="color:#aaa">${inst.name}</span>
+    suggestionsBox.innerHTML = matches.map((inst, i) =>
+      `<div class="wf-suggestion-item${i === suggestionIndex ? ' active' : ''}" data-symbol="${inst.tradingsymbol}">
+        <strong>${inst.tradingsymbol}</strong> <span style=\"color:#aaa\">${inst.name}</span>
       </div>`
     ).join("");
     suggestionsBox.style.display = "block";
+    suggestionsOpen = true;
   }
 
   function run(selectedSymbol) {
     const q = selectedSymbol || qInput.value;
-    const params = new URLSearchParams();
-    if (q) params.set("q", q);
-    params.set("limit", "30");
-    getJSON(`/stocks?${params.toString()}`).then(data => {
-      out.innerHTML = data.items.map(stockCard).join("");
-    });
+    window.location.href = `/stock.html?symbol=${encodeURIComponent(q)}`;
     suggestionsBox.style.display = "none";
   }
 
-  qInput.addEventListener("input", e => {
-    showSuggestions(e.target.value);
-  });
-
-  suggestionsBox.addEventListener("mousedown", e => {
-    const item = e.target.closest(".wf-suggestion-item");
-    if (item) {
-      qInput.value = item.dataset.symbol;
-      run(item.dataset.symbol);
-    }
-  });
-
-  btn.addEventListener("click", () => run());
-  run();
+  if (qInput && suggestionsBox) {
+    qInput.addEventListener("input", e => {
+      showSuggestions(e.target.value);
+    });
+    suggestionsBox.addEventListener("mousedown", e => {
+      const item = e.target.closest(".wf-suggestion-item");
+      if (item) {
+        qInput.value = item.dataset.symbol;
+        run(item.dataset.symbol);
+        suggestionsBox.style.display = "none";
+        suggestionsOpen = false;
+      }
+    });
+    qInput.addEventListener("keydown", e => {
+      if (!currentSuggestions.length || !suggestionsOpen) return;
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        suggestionIndex = (suggestionIndex + 1) % currentSuggestions.length;
+        showSuggestions(qInput.value);
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        suggestionIndex = (suggestionIndex - 1 + currentSuggestions.length) % currentSuggestions.length;
+        showSuggestions(qInput.value);
+      } else if (e.key === "Enter") {
+        if (suggestionIndex >= 0) {
+          qInput.value = currentSuggestions[suggestionIndex].tradingsymbol;
+          run(currentSuggestions[suggestionIndex].tradingsymbol);
+          suggestionsBox.style.display = "none";
+          suggestionsOpen = false;
+        } else {
+          run(qInput.value);
+          suggestionsBox.style.display = "none";
+          suggestionsOpen = false;
+        }
+      }
+    });
+    document.addEventListener("mousedown", e => {
+      if (suggestionsOpen && !suggestionsBox.contains(e.target) && e.target !== qInput) {
+        suggestionsBox.style.display = "none";
+        suggestionsOpen = false;
+      }
+    });
+  }
 }
 
 function renderStock() {
+  // Search bar suggestions logic (older screener style)
+  const qInput = document.getElementById("q");
+  const suggestionsBox = document.getElementById("search-suggestions");
+  let instruments = [];
+
+  // Load instruments.json for suggestions
+  fetch("/data/instruments.json")
+    .then(res => res.json())
+    .then(data => { instruments = data; })
+    .catch(() => { instruments = []; });
+
+  let suggestionIndex = -1;
+  let currentSuggestions = [];
+  let suggestionsOpen = false;
+
+  function showSuggestions(query) {
+    if (!query || !instruments.length) {
+      suggestionsBox.style.display = "none";
+      suggestionsBox.innerHTML = "";
+      currentSuggestions = [];
+      suggestionIndex = -1;
+      suggestionsOpen = false;
+      return;
+    }
+    const q = query.trim().toLowerCase();
+    const matches = instruments.filter(inst =>
+      inst.tradingsymbol.toLowerCase().includes(q) ||
+      (inst.name && inst.name.toLowerCase().includes(q))
+    ).slice(0, 8);
+    currentSuggestions = matches;
+    suggestionIndex = matches.length ? 0 : -1;
+    if (!matches.length) {
+      suggestionsBox.style.display = "none";
+      suggestionsBox.innerHTML = "";
+      suggestionsOpen = false;
+      return;
+    }
+    suggestionsBox.innerHTML = matches.map((inst, i) =>
+      `<div class="wf-suggestion-item${i === suggestionIndex ? ' active' : ''}" data-symbol="${inst.tradingsymbol}">
+        <strong>${inst.tradingsymbol}</strong> <span style=\"color:#aaa\">${inst.name}</span>
+      </div>`
+    ).join("");
+    suggestionsBox.style.display = "block";
+    suggestionsOpen = true;
+  }
+
+  function run(selectedSymbol) {
+    const q = selectedSymbol || qInput.value;
+    window.location.href = `/stock.html?symbol=${encodeURIComponent(q)}`;
+    suggestionsBox.style.display = "none";
+  }
+
+  if (qInput && suggestionsBox) {
+    qInput.addEventListener("input", e => {
+      showSuggestions(e.target.value);
+    });
+    suggestionsBox.addEventListener("mousedown", e => {
+      const item = e.target.closest(".wf-suggestion-item");
+      if (item) {
+        qInput.value = item.dataset.symbol;
+        run(item.dataset.symbol);
+        suggestionsBox.style.display = "none";
+        suggestionsOpen = false;
+      }
+    });
+    qInput.addEventListener("keydown", e => {
+      if (!currentSuggestions.length || !suggestionsOpen) return;
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        suggestionIndex = (suggestionIndex + 1) % currentSuggestions.length;
+        showSuggestions(qInput.value);
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        suggestionIndex = (suggestionIndex - 1 + currentSuggestions.length) % currentSuggestions.length;
+        showSuggestions(qInput.value);
+      } else if (e.key === "Enter") {
+        if (suggestionIndex >= 0) {
+          qInput.value = currentSuggestions[suggestionIndex].tradingsymbol;
+          run(currentSuggestions[suggestionIndex].tradingsymbol);
+          suggestionsBox.style.display = "none";
+          suggestionsOpen = false;
+        } else {
+          run(qInput.value);
+          suggestionsBox.style.display = "none";
+          suggestionsOpen = false;
+        }
+      }
+    });
+    document.addEventListener("mousedown", e => {
+      if (suggestionsOpen && !suggestionsBox.contains(e.target) && e.target !== qInput) {
+        suggestionsBox.style.display = "none";
+        suggestionsOpen = false;
+      }
+    });
+  }
   const params = new URLSearchParams(location.search);
   const symbol = params.get("symbol") || "RELIANCE";
   const title = document.getElementById("stock-title");
