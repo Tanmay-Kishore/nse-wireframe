@@ -143,12 +143,8 @@ function renderScreener() {
   const out = document.getElementById("screener-results");
   async function run() {
     const q = document.getElementById("q").value;
-    const minGap = document.getElementById("min-gap").value;
-    const minVol = document.getElementById("min-vol").value;
     const params = new URLSearchParams();
     if (q) params.set("q", q);
-    if (minGap) params.set("min_gap", minGap);
-    if (minVol) params.set("min_volume", minVol);
     params.set("limit", "30");
     const data = await getJSON(`/stocks?${params.toString()}`);
     out.innerHTML = data.items.map(stockCard).join("");

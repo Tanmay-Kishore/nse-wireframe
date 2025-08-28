@@ -25,16 +25,14 @@
 
     <main class="wf-container wf-main">
       <div class="wf-card">
-        <div class="wf-card-head">Filters</div>
+        <div class="wf-card-head">Search</div>
         <div class="wf-filters">
-          <input id="q" class="wf-input" type="text" placeholder="Search symbol/name..." />
-          <input id="min-gap" class="wf-input" type="number" step="0.1" placeholder="% Gap ≥" />
-          <input id="min-vol" class="wf-input" type="number" placeholder="Volume ≥" />
-          <button id="apply-filters" class="wf-btn">Apply</button>
+          <input id="q" class="wf-input" type="text" placeholder="Search symbol/name..." style="min-width:540px" />
+          <button id="apply-filters" class="wf-btn">Go</button>
         </div>
       </div>
       <div class="wf-card">
-        <div class="wf-card-head">Results</div>
+        <div class="wf-card-head">Watchlist</div>
         <div class="wf-grid-3" id="screener-results">
           <div class="wf-skel">Fetching stocks...</div>
         </div>
