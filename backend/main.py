@@ -11,11 +11,11 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 # Import routers
 try:
     from routers import stocks, alerts, journal, settings, websocket
-    from routers import nifty
+    from routers import nifty, indexes
 except ImportError:
     # If running from root directory
     from backend.routers import stocks, alerts, journal, settings, websocket
-    from backend.routers import nifty
+    from backend.routers import nifty, indexes
 
 app = FastAPI(title="NSE Monitor Wireframe")
 
@@ -44,6 +44,7 @@ app.include_router(journal.router)
 app.include_router(settings.router)
 app.include_router(websocket.router)
 app.include_router(nifty.router)
+app.include_router(indexes.router)
 
 @app.get("/")
 async def root():

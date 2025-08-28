@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 class UpstoxService:
     def __init__(self):
-        self.base_url = "https://api.upstox.com/v2"
+        self.base_url = "https://api.upstox.com/v3"
         self.access_token = None
         self.api_key = None
         self.api_secret = None

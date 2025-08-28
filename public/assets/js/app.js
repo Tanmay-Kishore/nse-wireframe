@@ -41,24 +41,79 @@ function stockCard(s) {
 }
 
 function renderOverview() {
-  // Snapshot + watchlist
-  getJSON("/stocks?limit=9").then(data => {
-    const grid = document.getElementById("watchlist-grid");
-    grid.innerHTML = data.items.map(stockCard).join("");
+  // Indexes section
+  getJSON("/index-quotes").then(data => {
+    const grid = document.getElementById("indexes-grid");
+    if (!grid) return;
+    grid.innerHTML = Object.entries(data).map(([symbol, idx]) => {
+      if (idx.error) {
+        return `<div class="wf-stock-card"><div class="wf-stock-head"><strong>${symbol}</strong></div><div class="wf-metrics"><span class="wf-tag">Error: ${idx.error}</span></div></div>`;
+      }
+      const live = idx.live_ohlc || {};
+      const prev = idx.prev_ohlc || {};
+      // Determine price movement
+        let pillClass = "";
+        let pillText = "-";
+        const last = Number(idx.last_price);
+        const prevClose = Number(prev.close);
+        const open = Number(live.open);
+        if (!isNaN(last)) {
+          if (!isNaN(prevClose)) {
+            if (last > prevClose) {
+              pillClass = "buy";
+              pillText = "▲";
+            } else if (last < prevClose) {
+              pillClass = "sell";
+              pillText = "▼";
+            } else {
+              pillClass = "";
+              pillText = "■";
+            }
+          } else if (!isNaN(open)) {
+            if (last > open) {
+              pillClass = "buy";
+              pillText = "▲";
+            } else if (last < open) {
+              pillClass = "sell";
+              pillText = "▼";
+            } else {
+              pillClass = "";
+              pillText = "■";
+            }
+          } else {
+            pillClass = "";
+            pillText = "■";
+          }
+        }
+        return `<div class="wf-stock-card">
+          <div class="wf-stock-head">
+            <div><strong>${symbol}</strong></div>
+            <div class="wf-pill ${pillClass}">${pillText}</div>
+          </div>
+          <div class="wf-metrics">
+            <div class="wf-kv"><span>Last</span><span>${idx.last_price ?? '-'}</span></div>
+            <div class="wf-kv"><span>Open</span><span>${live.open ?? '-'}</span></div>
+            <div class="wf-kv"><span>High</span><span>${live.high ?? '-'}</span></div>
+            <div class="wf-kv"><span>Low</span><span>${live.low ?? '-'}</span></div>
+            <div class="wf-kv"><span>Close</span><span>${live.close ?? '-'}</span></div>
+            <div class="wf-kv"><span>Volume</span><span>${live.volume ?? '-'}</span></div>
+          </div>
+          <div class="wf-metrics" style="margin-top:8px;font-size:0.95em;">
+            <div class="wf-kv"><span>Prev Open</span><span>${prev.open ?? '-'}</span></div>
+            <div class="wf-kv"><span>Prev High</span><span>${prev.high ?? '-'}</span></div>
+            <div class="wf-kv"><span>Prev Low</span><span>${prev.low ?? '-'}</span></div>
+            <div class="wf-kv"><span>Prev Close</span><span>${prev.close ?? '-'}</span></div>
+          </div>
+        </div>`;
+    }).join("");
   }).catch(console.error);
 
-  // Alerts
-  getJSON("/alerts").then(data => {
-    const ul = document.getElementById("live-alerts");
-    ul.innerHTML = data.items.map(a => `<li class="wf-alert ${a.severity}"><div><strong>${a.symbol}</strong> ${a.message}</div><div class="wf-tag">${new Date(a.ts).toLocaleTimeString()}</div></li>`).join("");
-  }).catch(console.error);
 
   // Market snapshot: NIFTY top gainers and losers
   const ms = document.getElementById("market-snapshot");
   if (ms) {
     getJSON("/nifty-movers").then(data => {
       let html = '';
-      html += '<div style="grid-column: span 3; font-weight: bold; font-size: 1.1em; margin-bottom: 8px;">Top Gainers</div>';
       html += data.gainers.slice(0, 10).map(g => `<div class="wf-stock-card">
         <div class="wf-stock-head"><div><strong>${g.symbol}</strong></div><div class="wf-pill buy">Gainer</div></div>
         <div class="wf-metrics">
@@ -67,7 +122,6 @@ function renderOverview() {
           <div class="wf-kv"><span>Vol</span><span>${g.trade_quantity}</span></div>
         </div>
       </div>`).join("");
-      html += '<div style="grid-column: span 3; font-weight: bold; font-size: 1.1em; margin:16px 0 8px 0;">Top Losers</div>';
       html += data.losers.slice(0, 7).map(l => `<div class="wf-stock-card">
         <div class="wf-stock-head"><div><strong>${l.symbol}</strong></div><div class="wf-pill sell">Loser</div></div>
         <div class="wf-metrics">
@@ -82,13 +136,6 @@ function renderOverview() {
     });
   }
 
-  // News sentiment placeholder
-  const ns = document.getElementById("news-stream");
-  if (ns) {
-    ns.innerHTML = ["Macro outlook improves", "RBI stance unchanged", "IT stocks under pressure"].map(h =>
-      `<div class="wf-alert warn"><div>${h}</div><div class="wf-tag">neutral</div></div>`
-    ).join("");
-  }
 }
 
 function renderScreener() {
