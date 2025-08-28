@@ -141,15 +141,65 @@ function renderOverview() {
 function renderScreener() {
   const btn = document.getElementById("apply-filters");
   const out = document.getElementById("screener-results");
-  async function run() {
-    const q = document.getElementById("q").value;
+  const qInput = document.getElementById("q");
+  const suggestionsBox = document.getElementById("search-suggestions");
+  let instruments = [];
+
+  // Load instruments.json once
+  fetch("/data/instruments.json")
+    .then(res => res.json())
+    .then(data => { instruments = data; })
+    .catch(() => { instruments = []; });
+
+  function showSuggestions(query) {
+    if (!query || !instruments.length) {
+      suggestionsBox.style.display = "none";
+      suggestionsBox.innerHTML = "";
+      return;
+    }
+    const q = query.trim().toLowerCase();
+    // Semantic search: match tradingsymbol or name
+    const matches = instruments.filter(inst =>
+      inst.tradingsymbol.toLowerCase().includes(q) ||
+      (inst.name && inst.name.toLowerCase().includes(q))
+    ).slice(0, 8);
+    if (!matches.length) {
+      suggestionsBox.style.display = "none";
+      suggestionsBox.innerHTML = "";
+      return;
+    }
+    suggestionsBox.innerHTML = matches.map(inst =>
+      `<div class="wf-suggestion-item" data-symbol="${inst.tradingsymbol}">
+        <strong>${inst.tradingsymbol}</strong> <span style="color:#aaa">${inst.name}</span>
+      </div>`
+    ).join("");
+    suggestionsBox.style.display = "block";
+  }
+
+  function run(selectedSymbol) {
+    const q = selectedSymbol || qInput.value;
     const params = new URLSearchParams();
     if (q) params.set("q", q);
     params.set("limit", "30");
-    const data = await getJSON(`/stocks?${params.toString()}`);
-    out.innerHTML = data.items.map(stockCard).join("");
+    getJSON(`/stocks?${params.toString()}`).then(data => {
+      out.innerHTML = data.items.map(stockCard).join("");
+    });
+    suggestionsBox.style.display = "none";
   }
-  btn.addEventListener("click", run);
+
+  qInput.addEventListener("input", e => {
+    showSuggestions(e.target.value);
+  });
+
+  suggestionsBox.addEventListener("mousedown", e => {
+    const item = e.target.closest(".wf-suggestion-item");
+    if (item) {
+      qInput.value = item.dataset.symbol;
+      run(item.dataset.symbol);
+    }
+  });
+
+  btn.addEventListener("click", () => run());
   run();
 }
 

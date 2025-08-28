@@ -37,6 +37,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.mount("/data", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "data")), name="data")
 # Include routers
 app.include_router(stocks.router)
 app.include_router(alerts.router)
