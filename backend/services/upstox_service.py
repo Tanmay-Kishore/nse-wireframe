@@ -72,12 +72,14 @@ class UpstoxService:
         try:
             if not self.is_configured():
                 return {"success": False, "message": "No access token configured"}
-            
-            # Test with user profile endpoint
-            response = self._make_request("/user/profile")
-            
-            if response and response.get("status") == "success":
-                user_data = response.get("data", {})
+            # Always use v2 for user/profile
+            url = "https://api.upstox.com/v2/user/profile"
+            headers = self._get_headers()
+            response = requests.get(url, headers=headers, timeout=10)
+            response.raise_for_status()
+            resp_json = response.json()
+            if resp_json and resp_json.get("status") == "success":
+                user_data = resp_json.get("data", {})
                 return {
                     "success": True,
                     "message": "Connection successful",
@@ -86,7 +88,6 @@ class UpstoxService:
                 }
             else:
                 return {"success": False, "message": "API connection failed"}
-                
         except Exception as e:
             return {"success": False, "message": f"Connection test failed: {str(e)}"}
     
