@@ -177,21 +177,28 @@ class UpstoxService:
         try:
             last_price = quote_data.get("last_price", 0)
             prev_close = quote_data.get("prev_close_price", last_price)
-            
             # Calculate percentage change
             change = last_price - prev_close
             change_percent = (change / prev_close * 100) if prev_close > 0 else 0
-            
             # Calculate gap (assuming pre-market or opening gap)
             open_price = quote_data.get("open_price", last_price)
             gap = ((open_price - prev_close) / prev_close * 100) if prev_close > 0 else 0
-            
             # Get OHLC data
             ohlc = quote_data.get("ohlc", {})
-            
+            # Lookup name from instruments.json
+            name = symbol
+            try:
+                with open(instruments_path, "r") as f:
+                    instruments = json.load(f)
+                for inst in instruments:
+                    if inst.get("tradingsymbol", "").upper() == symbol.upper():
+                        name = inst.get("name", symbol)
+                        break
+            except Exception:
+                pass
             return {
                 "symbol": symbol,
-                "name": symbol,  # Upstox doesn't provide company name in quotes
+                "name": name,
                 "price": round(last_price, 2),
                 "change": round(change, 2),
                 "change_percent": round(change_percent, 2),
@@ -219,7 +226,6 @@ class UpstoxService:
                     "target": round(last_price * 1.05, 2)
                 }
             }
-            
         except Exception as e:
             logger.error(f"Error formatting stock data: {e}")
             return self._get_fallback_data(symbol)
