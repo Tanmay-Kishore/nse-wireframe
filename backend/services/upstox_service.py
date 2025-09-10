@@ -8,6 +8,9 @@ import requests
 from typing import Dict, List, Optional, Any
 from datetime import datetime, timedelta
 import json
+import websockets
+from proto import market_data_feed_pb2
+import base64
 from routers.settings import load_upstox_config
 
 # Set up logging
@@ -22,6 +25,73 @@ class UpstoxService:
         self.api_key = None
         self.api_secret = None
         self._load_config()
+
+    async def subscribe_price_stream(self, instrument_keys):
+        """
+        Connects to Upstox WebSocket and yields live ticks for the given instrument_keys, decoding protobuf messages.
+        """
+
+        ws_url = "wss://api.upstox.com/feed/market-data"
+        headers = {
+            "Authorization": f"Bearer {self.access_token}"
+        }
+        async with websockets.connect(ws_url, extra_headers=headers) as ws:
+            # Subscribe to instruments (Upstox expects a JSON message)
+            subscribe_msg = {
+                "guid": "client-1",
+                "method": "sub",
+                "data": {
+                    "mode": "full",
+                    "instrument_keys": instrument_keys
+                }
+            }
+            await ws.send(json.dumps(subscribe_msg))
+            while True:
+                msg = await ws.recv()
+                try:
+                    # Upstox sends base64-encoded protobuf in 'data' field
+                    msg_obj = json.loads(msg)
+                    if "data" in msg_obj:
+                        pb_bytes = base64.b64decode(msg_obj["data"])
+                        feed_response = market_data_feed_pb2.FeedResponse()
+                        feed_response.ParseFromString(pb_bytes)
+                        # Extract ticks for each instrument
+                        for key, feed in feed_response.feeds.items():
+                            # feed is a Feed message, which may contain marketFF, indexFF, etc.
+                            tick = {}
+                            if feed.HasField("marketFF"):
+                                market_ff = feed.marketFF
+                                if market_ff.HasField("ltpc"):
+                                    tick["ltp"] = market_ff.ltpc.ltp
+                                if market_ff.HasField("marketOHLC"):
+                                    ohlc_list = market_ff.marketOHLC.ohlc
+                                    if ohlc_list:
+                                        ohlc = ohlc_list[0]
+                                        tick["open"] = ohlc.open
+                                        tick["high"] = ohlc.high
+                                        tick["low"] = ohlc.low
+                                        tick["close"] = ohlc.close
+                                        tick["vol"] = ohlc.vol
+                                tick["instrument_key"] = key
+                            elif feed.HasField("indexFF"):
+                                index_ff = feed.indexFF
+                                if index_ff.HasField("ltpc"):
+                                    tick["ltp"] = index_ff.ltpc.ltp
+                                if index_ff.HasField("marketOHLC"):
+                                    ohlc_list = index_ff.marketOHLC.ohlc
+                                    if ohlc_list:
+                                        ohlc = ohlc_list[0]
+                                        tick["open"] = ohlc.open
+                                        tick["high"] = ohlc.high
+                                        tick["low"] = ohlc.low
+                                        tick["close"] = ohlc.close
+                                        tick["vol"] = ohlc.vol
+                                tick["instrument_key"] = key
+                            # Add more parsing as needed for other feed types
+                            yield tick
+                except Exception as e:
+                    logger.error(f"Error decoding Upstox tick: {e}")
+                    continue
     
     def _load_config(self):
         """Load Upstox configuration"""
