@@ -3,7 +3,7 @@ Upstox API Service
 Handles real-time market data fetching from Upstox API
 """
 
-import logging
+import logging, os
 import requests
 from typing import Dict, List, Optional, Any
 from datetime import datetime, timedelta
@@ -13,6 +13,7 @@ from routers.settings import load_upstox_config
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+instruments_path = os.path.join(os.path.dirname(__file__), '../data/instruments.json')
 
 class UpstoxService:
     def __init__(self):
@@ -109,42 +110,47 @@ class UpstoxService:
             logger.error(f"Error fetching quote for {symbol}: {e}")
             return None
     
-    def get_market_quotes_batch(self, symbols: List[str], exchange: str = "NSE_EQ") -> Dict[str, Dict]:
-        """Get market quotes for multiple symbols"""
+    def get_market_quotes_batch(self, instrument_keys: List[str]) -> Dict[str, Dict]:
+        """Get market quotes for multiple instrument keys (no prefix added), always use v2 endpoint."""
         try:
-            instrument_keys = [f"{exchange}:{symbol}" for symbol in symbols]
-            endpoint = f"/market-quote/quotes"
+            url = "https://api.upstox.com/v2/market-quote/quotes"
+            headers = self._get_headers()
             params = {"instrument_key": ",".join(instrument_keys)}
-            
-            response = self._make_request(endpoint, params)
-            
-            if response and response.get("status") == "success":
-                return response.get("data", {})
-            
+            response = requests.get(url, headers=headers, params=params, timeout=10)
+            response.raise_for_status()
+            resp_json = response.json()
+            if resp_json and resp_json.get("status") == "success":
+                return resp_json.get("data", {})
             return {}
-            
         except Exception as e:
             logger.error(f"Error fetching batch quotes: {e}")
             return {}
     
-    def get_historical_data(self, symbol: str, interval: str = "1day", exchange: str = "NSE_EQ") -> Optional[List[Dict]]:
-        """Get historical candle data"""
+    def get_historical_data(self, symbol: str, exchange: str = "NSE_EQ") -> Optional[List[Dict]]:
+        """Get daily historical candle data using Upstox v3 endpoint"""
         try:
-            instrument_key = f"{exchange}:{symbol}"
-            
-            # Get data for last 30 days
+            # Find instrument_key in format NSE_EQ|ISIN (URL-encoded)
+            # If symbol is ISIN, use as is; else, lookup ISIN from instruments.json
+            instrument_key = None
+            try:
+                with open(instruments_path, "r") as f:
+                    instruments = json.load(f)
+                for inst in instruments:
+                    if inst.get("tradingsymbol", "").upper() == symbol.upper():
+                        instrument_key = inst['instrument_key']
+                        break
+            except Exception as e:
+                logger.error(f"Instrument lookup failed: {e}")
+            if not instrument_key:
+                instrument_key = f"{exchange}|{symbol}"  # fallback, may be ISIN
+            encoded_key = instrument_key.replace("|", "%7C")
             to_date = datetime.now().strftime("%Y-%m-%d")
             from_date = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
-            
-            endpoint = f"/historical-candle/{instrument_key}/{interval}/{to_date}/{from_date}"
-            
+            endpoint = f"/historical-candle/{encoded_key}/days/1/{to_date}/{from_date}"
             response = self._make_request(endpoint)
-            
             if response and response.get("status") == "success":
                 return response.get("data", {}).get("candles", [])
-            
             return None
-            
         except Exception as e:
             logger.error(f"Error fetching historical data for {symbol}: {e}")
             return None

@@ -2,7 +2,11 @@ from fastapi import APIRouter, Query, HTTPException
 from typing import Optional
 import random
 from datetime import datetime, timedelta
+import os, json, logging
+from services.upstox_service import get_upstox_service
 
+upstox = get_upstox_service()
+instruments_path = os.path.join(os.path.dirname(__file__), '../data/instruments.json')
 router = APIRouter(prefix="/api", tags=["stocks"])
 
 # Mock data helpers (wireframe)
@@ -59,61 +63,42 @@ def mock_alert(symbol: str):
 async def list_stocks(q: Optional[str] = None, min_gap: Optional[float] = None, min_volume: Optional[int] = None, limit: int = 20):
     """Get list of stocks with optional filters"""
     try:
-        # Try to use Upstox API first
-        from services.upstox_service import get_upstox_service
-        upstox = get_upstox_service()
         
-        if upstox.is_configured():
-            # Get real data from Upstox
-            symbols_to_fetch = SYMBOLS[:limit]  # Limit API calls
-            
-            if q:  # If search query provided, try to find matching symbols
-                search_results = upstox.search_instruments(q)
-                if search_results:
-                    # Extract symbols from search results
-                    symbols_to_fetch = [result.get("tradingsymbol", result.get("instrument_key", "").split(":")[-1]) 
-                                      for result in search_results[:limit]]
-                else:
-                    # Filter existing symbols by query
-                    ql = q.lower()
-                    symbols_to_fetch = [s for s in SYMBOLS if ql in s.lower() or ql in NAMES.get(s, "").lower()][:limit]
-            
-            # Fetch real market data
-            quotes_data = upstox.get_market_quotes_batch(symbols_to_fetch)
-            items = []
-            
-            for symbol in symbols_to_fetch:
-                instrument_key = f"NSE_EQ:{symbol}"
-                quote = quotes_data.get(instrument_key, {})
-                
-                if quote:
-                    stock_data = upstox.format_stock_data(symbol, quote)
-                else:
-                    # Fallback to mock data for this symbol
-                    stock_data = mock_stock(symbol)
-                    stock_data["data_source"] = "mock"
-                
-                items.append(stock_data)
-            
-            # Apply filters
-            if min_gap is not None:
-                items = [s for s in items if abs(s["gap"]) >= float(min_gap)]
-            if min_volume is not None:
-                items = [s for s in items if s["volume"] >= int(min_volume)]
-            
-            return {"items": items, "data_source": "upstox"}
-        
-        else:
-            # Fallback to mock data
-            items = [mock_stock(s) for s in SYMBOLS]
-            if q:
-                ql = q.lower()
-                items = [s for s in items if ql in s["symbol"].lower() or ql in s["name"].lower()]
-            if min_gap is not None:
-                items = [s for s in items if abs(s["gap"]) >= float(min_gap)]
-            if min_volume is not None:
-                items = [s for s in items if s["volume"] >= int(min_volume)]
-            return {"items": items[:limit], "data_source": "mock"}
+        with open(instruments_path, 'r') as f:
+            instruments = json.load(f)
+        symbol_to_key = {inst['tradingsymbol'].upper(): inst['instrument_key'] for inst in instruments if 'tradingsymbol' in inst and 'instrument_key' in inst}
+        # Prepare list of symbols
+        symbols_to_fetch = SYMBOLS[:limit]
+        if q:
+            ql = q.lower()
+            symbols_to_fetch = [s for s in SYMBOLS if ql in s.lower() or ql in NAMES.get(s, "").lower()][:limit]
+        # Get instrument keys for symbols
+        instrument_keys = [symbol_to_key.get(s.upper()) for s in symbols_to_fetch if symbol_to_key.get(s.upper())]
+        # Fetch real market data
+        items = []
+        quotes_data = {}
+        if upstox.is_configured() and instrument_keys:
+            quotes_data = upstox.get_market_quotes_batch(instrument_keys)
+        for symbol in symbols_to_fetch:
+            # Upstox response uses NSE_EQ:SYMBOL as key
+            upstox_key = f"NSE_EQ:{symbol}"
+            quote = quotes_data.get(upstox_key, {})
+            if quote:
+                stock_data = upstox.format_stock_data(symbol, quote)
+                stock_data["data_source"] = "upstox"
+                # Optionally add instrument_token from quote
+                if "instrument_token" in quote:
+                    stock_data["instrument_token"] = quote["instrument_token"]
+            else:
+                stock_data = mock_stock(symbol)
+                stock_data["data_source"] = "mock"
+            items.append(stock_data)
+        # Apply filters
+        if min_gap is not None:
+            items = [s for s in items if abs(s["gap"]) >= float(min_gap)]
+        if min_volume is not None:
+            items = [s for s in items if s["volume"] >= int(min_volume)]
+        return {"items": items, "data_source": "upstox"}
             
     except Exception as e:
         # If Upstox fails, fallback to mock data
@@ -131,62 +116,48 @@ async def list_stocks(q: Optional[str] = None, min_gap: Optional[float] = None, 
 async def get_stock(symbol: str):
     """Get detailed information for a specific stock"""
     try:
-        # Try to use Upstox API first
-        from services.upstox_service import get_upstox_service
-        upstox = get_upstox_service()
-        
         symbol = symbol.upper()
-        
-        if upstox.is_configured():
-            # Get real data from Upstox
-            quote_data = upstox.get_market_quote(symbol)
-            
-            if quote_data:
-                s = upstox.format_stock_data(symbol, quote_data)
+        with open(instruments_path, 'r') as f:
+            instruments = json.load(f)
+        symbol_to_key = {inst['tradingsymbol'].upper(): inst['instrument_key'] for inst in instruments if 'tradingsymbol' in inst and 'instrument_key' in inst}
+        instrument_key = symbol_to_key.get(symbol)
+        upstox_key = f"NSE_EQ:{symbol}"
+        s = None
+        if upstox.is_configured() and instrument_key:
+            quotes_data = upstox.get_market_quotes_batch([instrument_key])
+            quote = quotes_data.get(upstox_key, {})
+            if quote:
+                s = upstox.format_stock_data(symbol, quote)
                 s["data_source"] = "upstox"
-                
-                # Try to get historical data
+                if "instrument_token" in quote:
+                    s["instrument_token"] = quote["instrument_token"]
+                # Try to get historical data (optional, can be improved)
                 historical_data = upstox.get_historical_data(symbol)
                 if historical_data:
-                    # Convert to our format (last 60 data points)
                     s["history"] = []
                     for i, candle in enumerate(historical_data[-60:]):
-                        if len(candle) >= 5:  # [timestamp, open, high, low, close, volume]
+                        if len(candle) >= 5:
                             s["history"].append({
                                 "ts": candle[0],
-                                "price": candle[4]  # Close price
+                                "price": candle[4]
                             })
                 else:
-                    # Fallback to simulated history
-                    s["history"] = [{"ts": (datetime.utcnow() - timedelta(minutes=i)).isoformat(), 
-                                   "price": round(s["price"]*(1+random.uniform(-0.01,0.01)),2)} 
+                    s["history"] = [{"ts": (datetime.utcnow() - timedelta(minutes=i)).isoformat(),
+                                   "price": round(s["price"]*(1+random.uniform(-0.01,0.01)),2)}
                                   for i in range(60)]
-            else:
-                # Upstox failed for this symbol, use mock data
-                s = mock_stock(symbol)
-                s["data_source"] = "mock"
-                s["history"] = [{"ts": (datetime.utcnow() - timedelta(minutes=i)).isoformat(), 
-                               "price": round(s["price"]*(1+random.uniform(-0.01,0.01)),2)} 
-                              for i in range(60)]
-        else:
-            # No Upstox config, use mock data
+        if not s:
             s = mock_stock(symbol)
             s["data_source"] = "mock"
-            s["history"] = [{"ts": (datetime.utcnow() - timedelta(minutes=i)).isoformat(), 
-                           "price": round(s["price"]*(1+random.uniform(-0.01,0.01)),2)} 
+            s["history"] = [{"ts": (datetime.utcnow() - timedelta(minutes=i)).isoformat(),
+                           "price": round(s["price"]*(1+random.uniform(-0.01,0.01)),2)}
                           for i in range(60)]
-        
-        # Add mock alerts (could be enhanced with real alert logic)
         s["alerts"] = [mock_alert(symbol) for _ in range(random.randint(0,3))]
-        
         return s
-        
     except Exception as e:
-        # Fallback to mock data on any error
         s = mock_stock(symbol.upper())
         s["alerts"] = [mock_alert(symbol) for _ in range(random.randint(0,3))]
-        s["history"] = [{"ts": (datetime.utcnow() - timedelta(minutes=i)).isoformat(), 
-                        "price": round(s["price"]*(1+random.uniform(-0.01,0.01)),2)} 
+        s["history"] = [{"ts": (datetime.utcnow() - timedelta(minutes=i)).isoformat(),
+                        "price": round(s["price"]*(1+random.uniform(-0.01,0.01)),2)}
                        for i in range(60)]
         s["data_source"] = "mock"
         s["error"] = str(e)
