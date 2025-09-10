@@ -10,7 +10,16 @@ instruments_path = os.path.join(os.path.dirname(__file__), '../data/instruments.
 router = APIRouter(prefix="/api", tags=["stocks"])
 
 # Mock data helpers (wireframe)
-SYMBOLS = ["RELIANCE","HDFCBANK","TCS","INFY","ICICIBANK","SBIN","BHARTIARTL","LT","ITC","KOTAKBANK","HINDUNILVR","AXISBANK"]
+watchlist_path = os.path.join(os.path.dirname(__file__), '../data/watchlist.json')
+
+def get_watchlist_symbols():
+    try:
+        with open(watchlist_path, 'r') as f:
+            data = json.load(f)
+        # Expecting {"symbols": ["RELIANCE", ...]}
+        return data.get("symbols", [])
+    except Exception:
+        return []
 NAMES = {
     "RELIANCE": "Reliance Industries",
     "HDFCBANK": "HDFC Bank",
@@ -68,10 +77,11 @@ async def list_stocks(q: Optional[str] = None, min_gap: Optional[float] = None, 
             instruments = json.load(f)
         symbol_to_key = {inst['tradingsymbol'].upper(): inst['instrument_key'] for inst in instruments if 'tradingsymbol' in inst and 'instrument_key' in inst}
         # Prepare list of symbols
-        symbols_to_fetch = SYMBOLS[:limit]
+        symbols = get_watchlist_symbols()
+        symbols_to_fetch = symbols[:limit]
         if q:
             ql = q.lower()
-            symbols_to_fetch = [s for s in SYMBOLS if ql in s.lower() or ql in NAMES.get(s, "").lower()][:limit]
+            symbols_to_fetch = [s for s in symbols if ql in s.lower() or ql in NAMES.get(s, "").lower()][:limit]
         # Get instrument keys for symbols
         instrument_keys = [symbol_to_key.get(s.upper()) for s in symbols_to_fetch if symbol_to_key.get(s.upper())]
         # Fetch real market data
@@ -102,7 +112,8 @@ async def list_stocks(q: Optional[str] = None, min_gap: Optional[float] = None, 
             
     except Exception as e:
         # If Upstox fails, fallback to mock data
-        items = [mock_stock(s) for s in SYMBOLS]
+        symbols = get_watchlist_symbols()
+        items = [mock_stock(s) for s in symbols]
         if q:
             ql = q.lower()
             items = [s for s in items if ql in s["symbol"].lower() or ql in s["name"].lower()]
@@ -162,3 +173,35 @@ async def get_stock(symbol: str):
         s["data_source"] = "mock"
         s["error"] = str(e)
         return s
+    
+@router.post("/watchlist/add")
+async def add_to_watchlist(symbol: str):
+    """Add a stock symbol to the watchlist"""
+    symbol = symbol.upper()
+    try:
+        with open(watchlist_path, 'r') as f:
+            data = json.load(f)
+        symbols = set(data.get("symbols", []))
+        symbols.add(symbol)
+        data["symbols"] = list(symbols)
+        with open(watchlist_path, 'w') as f:
+            json.dump(data, f, indent=2)
+        return {"success": True, "symbols": data["symbols"]}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@router.post("/watchlist/remove")
+async def remove_from_watchlist(symbol: str):
+    """Remove a stock symbol from the watchlist"""
+    symbol = symbol.upper()
+    try:
+        with open(watchlist_path, 'r') as f:
+            data = json.load(f)
+        symbols = set(data.get("symbols", []))
+        symbols.discard(symbol)
+        data["symbols"] = list(symbols)
+        with open(watchlist_path, 'w') as f:
+            json.dump(data, f, indent=2)
+        return {"success": True, "symbols": data["symbols"]}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
