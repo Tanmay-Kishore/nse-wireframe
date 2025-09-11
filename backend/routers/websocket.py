@@ -47,7 +47,6 @@ async def ws_price(websocket: WebSocket, symbol: Optional[str] = Query(None)):
             else:
                 # Start streaming price ticks immediately
                 async for tick in upstox_service.subscribe_price_stream([current_instrument_key]):
-                    print("Tick received:", tick)  # Debug log  
                     
                     # Convert raw tick to quote format for processing
                     quote_data = {
