@@ -48,7 +48,32 @@ async def ws_price(websocket: WebSocket, symbol: Optional[str] = Query(None)):
                 # Start streaming price ticks immediately
                 async for tick in upstox_service.subscribe_price_stream([current_instrument_key]):
                     print("Tick received:", tick)  # Debug log  
-                    await websocket.send_json(tick)
+                    
+                    # Convert raw tick to quote format for processing
+                    quote_data = {
+                        "last_price": tick.get("ltp", 0),
+                        "prev_close_price": tick.get("cp", tick.get("ltp", 0)),
+                        "open_price": tick.get("open", tick.get("ltp", 0)),
+                        "volume": tick.get("vol", 0),
+                        "average_price": tick.get("atp", tick.get("ltp", 0)),
+                        "ohlc": {
+                            "open": tick.get("open", 0),
+                            "high": tick.get("high", 0),
+                            "low": tick.get("low", 0),
+                            "close": tick.get("close", tick.get("ltp", 0))
+                        }
+                    }
+                    
+                    # Format using the existing formatter
+                    formatted_stock_data = upstox_service.format_stock_data(current_symbol, quote_data)
+                    
+                    # Send formatted data to frontend
+                    response = {
+                        "symbol": current_symbol,
+                        "price": formatted_stock_data.get("price"),
+                        "tick": formatted_stock_data
+                    }
+                    await websocket.send_json(response)
     except WebSocketDisconnect:
         if price_stream_task:
             price_stream_task.cancel()
