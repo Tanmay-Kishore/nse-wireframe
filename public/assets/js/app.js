@@ -140,13 +140,74 @@ function renderOverview() {
 
 function renderScreener() {
   const out = document.getElementById("screener-results");
+  let stocksData = {};
 
   function run() {
     const params = new URLSearchParams();
     params.set("limit", "30");
     getJSON(`/stocks?${params.toString()}`).then(data => {
+      // Store initial data
+      data.items.forEach(stock => {
+        stocksData[stock.symbol] = stock;
+      });
       out.innerHTML = data.items.map(stockCard).join("");
+      
+      // Setup WebSocket for real-time updates
+      setupScreenerWebSocket();
     });
+  }
+
+  function setupScreenerWebSocket() {
+    const badge = document.getElementById("screener-realtime-badge");
+    const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws/screener`);
+    
+    ws.onopen = () => {
+      console.log("Screener WebSocket connected");
+      if (badge) badge.textContent = "RT: live";
+    };
+    
+    ws.onmessage = (ev) => {
+      const data = JSON.parse(ev.data);
+      if (data.type === "stock_update" && data.symbol && data.data) {
+        // Update stored data
+        stocksData[data.symbol] = data.data;
+        
+        // Find the stock card element and update it
+        updateStockCard(data.symbol, data.data);
+      }
+    };
+    
+    ws.onclose = () => {
+      console.log("Screener WebSocket disconnected");
+      if (badge) badge.textContent = "RT: disconnected";
+      
+      // Attempt to reconnect after 3 seconds
+      setTimeout(() => {
+        if (document.documentElement.getAttribute("data-page") === "screener") {
+          if (badge) badge.textContent = "RT: reconnecting";
+          setupScreenerWebSocket();
+        }
+      }, 3000);
+    };
+    
+    ws.onerror = (error) => {
+      console.error("Screener WebSocket error:", error);
+      if (badge) badge.textContent = "RT: error";
+    };
+  }
+
+  function updateStockCard(symbol, stockData) {
+    // Find the existing card by looking for the symbol in the stock cards
+    const cards = out.querySelectorAll('.wf-stock-card');
+    for (let card of cards) {
+      const symbolElement = card.querySelector('strong');
+      if (symbolElement && symbolElement.textContent === symbol) {
+        // Replace the entire card with updated data
+        const newCardHTML = stockCard(stockData);
+        card.outerHTML = newCardHTML;
+        break;
+      }
+    }
   }
 
   run();
