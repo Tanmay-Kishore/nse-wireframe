@@ -29,65 +29,116 @@ class UpstoxService:
     async def subscribe_price_stream(self, instrument_keys):
         """
         Connects to Upstox WebSocket and yields live ticks for the given instrument_keys, decoding protobuf messages.
+        Aligned to Upstox official example: uses authorized websocket URL, SSL context, and correct subscribe message format.
         """
+        # Step 1: Get authorized websocket URL
+        try:
+            auth_url = f"{self.base_url}/feed/market-data-feed/authorize"
+            headers = {
+                "Authorization": f"Bearer {self.access_token}",
+                "Accept": "application/json"
+            }
+            resp = requests.get(auth_url, headers=headers, timeout=10)
+            resp.raise_for_status()
+            auth_data = resp.json()
+            ws_url = auth_data["data"]["authorized_redirect_uri"]
+        except Exception as e:
+            logger.error(f"Failed to get authorized websocket URL: {e}")
+            return
 
-        ws_url = "wss://api.upstox.com/feed/market-data"
-        headers = {
-            "Authorization": f"Bearer {self.access_token}"
-        }
-        async with websockets.connect(ws_url, extra_headers=headers) as ws:
-            # Subscribe to instruments (Upstox expects a JSON message)
+        # Step 2: Create SSL context
+        import ssl
+        ssl_context = ssl.create_default_context()
+        ssl_context.check_hostname = False
+        ssl_context.verify_mode = ssl.CERT_NONE
+
+        # Step 3: Connect to websocket
+        async with websockets.connect(ws_url, ssl=ssl_context) as ws:
+            # Step 4: Send subscribe message (use 'instrumentKeys' camelCase)
             subscribe_msg = {
                 "guid": "client-1",
                 "method": "sub",
                 "data": {
                     "mode": "full",
-                    "instrument_keys": instrument_keys
+                    "instrumentKeys": instrument_keys
                 }
             }
-            await ws.send(json.dumps(subscribe_msg))
+            await ws.send(json.dumps(subscribe_msg).encode('utf-8'))
+            # Step 5: Receive and decode messages
             while True:
                 msg = await ws.recv()
                 try:
-                    # Upstox sends base64-encoded protobuf in 'data' field
-                    msg_obj = json.loads(msg)
-                    if "data" in msg_obj:
-                        pb_bytes = base64.b64decode(msg_obj["data"])
-                        feed_response = market_data_feed_pb2.FeedResponse()
-                        feed_response.ParseFromString(pb_bytes)
-                        # Extract ticks for each instrument
-                        for key, feed in feed_response.feeds.items():
-                            # feed is a Feed message, which may contain marketFF, indexFF, etc.
-                            tick = {}
-                            if feed.HasField("marketFF"):
-                                market_ff = feed.marketFF
+                    # Try to decode as protobuf directly (Upstox v3)
+                    feed_response = market_data_feed_pb2.FeedResponse()
+                    if isinstance(msg, bytes):
+                        feed_response.ParseFromString(msg)
+                    else:
+                        # If message is JSON with base64 'data' field (older Upstox)
+                        msg_obj = json.loads(msg)
+                        if "data" in msg_obj:
+                            pb_bytes = base64.b64decode(msg_obj["data"])
+                            feed_response.ParseFromString(pb_bytes)
+                        else:
+                            continue
+                    # Extract ticks for each instrument
+                    for key, feed in feed_response.feeds.items():
+                        tick = {}
+                        fields = [desc.name for desc, _ in feed.ListFields()]
+                        if "fullFeed" in fields:
+                            full_feed = feed.fullFeed
+                            # Log the structure for debugging
+                            # Parse marketFF under fullFeed
+                            if full_feed.HasField("marketFF"):
+                                market_ff = full_feed.marketFF
+                                # Parse ltpc (last traded price info)
                                 if market_ff.HasField("ltpc"):
                                     tick["ltp"] = market_ff.ltpc.ltp
+                                    tick["ltt"] = market_ff.ltpc.ltt
+                                    tick["ltq"] = market_ff.ltpc.ltq
+                                    tick["cp"] = market_ff.ltpc.cp
+                                # Parse bid/ask quotes (market depth)
+                                if market_ff.HasField("marketLevel"):
+                                    bid_ask_quotes = []
+                                    for baq in market_ff.marketLevel.bidAskQuote:
+                                        bid_ask_quotes.append({
+                                            "bidQ": baq.bidQ,
+                                            "bidP": baq.bidP,
+                                            "askQ": baq.askQ,
+                                            "askP": baq.askP
+                                        })
+                                    tick["bid_ask_quotes"] = bid_ask_quotes
+                                # Parse OHLC data
                                 if market_ff.HasField("marketOHLC"):
                                     ohlc_list = market_ff.marketOHLC.ohlc
-                                    if ohlc_list:
-                                        ohlc = ohlc_list[0]
-                                        tick["open"] = ohlc.open
-                                        tick["high"] = ohlc.high
-                                        tick["low"] = ohlc.low
-                                        tick["close"] = ohlc.close
-                                        tick["vol"] = ohlc.vol
+                                    ohlc_data = []
+                                    for ohlc in ohlc_list:
+                                        ohlc_data.append({
+                                            "interval": ohlc.interval,
+                                            "open": ohlc.open,
+                                            "high": ohlc.high,
+                                            "low": ohlc.low,
+                                            "close": ohlc.close,
+                                            "vol": ohlc.vol,
+                                            "ts": ohlc.ts
+                                        })
+                                    tick["ohlc"] = ohlc_data
+                                    # For convenience, also set 1d OHLC as top-level fields if present
+                                    for ohlc in ohlc_data:
+                                        if ohlc["interval"] == "1d":
+                                            tick["open"] = ohlc["open"]
+                                            tick["high"] = ohlc["high"]
+                                            tick["low"] = ohlc["low"]
+                                            tick["close"] = ohlc["close"]
+                                            tick["vol"] = ohlc["vol"]
+                                            break
+                                # Parse ATP, VTT, TBQ, TSQ (scalar fields, no HasField)
+                                tick["atp"] = market_ff.atp
+                                tick["vtt"] = market_ff.vtt
+                                tick["tbq"] = market_ff.tbq
+                                tick["tsq"] = market_ff.tsq
                                 tick["instrument_key"] = key
-                            elif feed.HasField("indexFF"):
-                                index_ff = feed.indexFF
-                                if index_ff.HasField("ltpc"):
-                                    tick["ltp"] = index_ff.ltpc.ltp
-                                if index_ff.HasField("marketOHLC"):
-                                    ohlc_list = index_ff.marketOHLC.ohlc
-                                    if ohlc_list:
-                                        ohlc = ohlc_list[0]
-                                        tick["open"] = ohlc.open
-                                        tick["high"] = ohlc.high
-                                        tick["low"] = ohlc.low
-                                        tick["close"] = ohlc.close
-                                        tick["vol"] = ohlc.vol
-                                tick["instrument_key"] = key
-                            # Add more parsing as needed for other feed types
+                        # Add more parsing as needed for other feed types
+                        if tick:
                             yield tick
                 except Exception as e:
                     logger.error(f"Error decoding Upstox tick: {e}")

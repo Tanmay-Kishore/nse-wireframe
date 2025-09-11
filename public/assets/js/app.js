@@ -368,16 +368,40 @@ function renderStock() {
     al.innerHTML = s.alerts.map(a => `<li class="wf-alert ${a.severity}"><div>${a.message}</div><div class="wf-tag">${new Date(a.ts).toLocaleTimeString()}</div></li>`).join("");
   });
 
-  // WebSocket realtime simulation
-  const badge = document.getElementById("realtime-badge");
-  const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws/price?symbol=${encodeURIComponent(symbol)}`);
-  ws.onopen = () => { badge.textContent = "RT: live"; };
-  ws.onmessage = (ev) => {
-    const data = JSON.parse(ev.data);
+// WebSocket for real-time price updates
+const badge = document.getElementById("realtime-badge");
+const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws/price?symbol=${encodeURIComponent(symbol)}`);
+ws.onopen = () => { badge.textContent = "RT: live"; };
+ws.onmessage = (ev) => {
+  const data = JSON.parse(ev.data);
+  if (data.price !== undefined) {
     const el = document.getElementById("rt-price");
-    if (el) el.textContent = data.price.toFixed(2);
-  };
-  ws.onclose = () => { badge.textContent = "RT: disconnected"; };
+    if (el) el.textContent = Number(data.price).toFixed(2);
+  }
+  if (data.tick) {
+    if (data.tick.gap !== undefined) {
+      const gapEl = document.getElementById("rt-gap");
+      if (gapEl) gapEl.textContent = Number(data.tick.gap).toFixed(2) + "%";
+    }
+    if (data.tick.volume !== undefined) {
+      const volEl = document.getElementById("rt-volume");
+      if (volEl) volEl.textContent = data.tick.volume;
+    }
+    if (data.tick.vwap !== undefined) {
+      const vwapEl = document.getElementById("rt-vwap");
+      if (vwapEl) vwapEl.textContent = Number(data.tick.vwap).toFixed(2);
+    }
+    if (data.tick.rsi !== undefined) {
+      const rsiEl = document.getElementById("rt-rsi");
+      if (rsiEl) rsiEl.textContent = Number(data.tick.rsi).toFixed(1);
+    }
+    if (data.tick.ma20 !== undefined && data.tick.ma50 !== undefined && data.tick.ma200 !== undefined) {
+      const maEl = document.getElementById("rt-ma");
+      if (maEl) maEl.textContent = `${Number(data.tick.ma20).toFixed(2)} / ${Number(data.tick.ma50).toFixed(2)} / ${Number(data.tick.ma200).toFixed(2)}`;
+    }
+  }
+};
+ws.onclose = () => { badge.textContent = "RT: disconnected"; };
 }
 
 function renderAlerts() {

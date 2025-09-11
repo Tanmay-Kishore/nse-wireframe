@@ -90,8 +90,20 @@ async def get_settings():
     telegram_connected = False
     
     if upstox_config:
-        upstox_connected = bool(upstox_config.get("access_token"))
-        upstox_token_expiry = upstox_config.get("expires_at", "")
+        # Check if token exists and is not expired
+        access_token = upstox_config.get("access_token")
+        expires_at_str = upstox_config.get("expires_at", "")
+        
+        if access_token and expires_at_str:
+            try:
+                expires_at = datetime.fromisoformat(expires_at_str)
+                upstox_connected = datetime.now() < expires_at
+            except:
+                upstox_connected = False
+        else:
+            upstox_connected = False
+            
+        upstox_token_expiry = expires_at_str
     
     if telegram_config:
         telegram_connected = bool(telegram_config.get("bot_token") and telegram_config.get("chat_id"))
