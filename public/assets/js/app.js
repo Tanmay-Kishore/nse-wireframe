@@ -47,6 +47,7 @@ function stockCard(s) {
       <span class="wf-tag">SL: ${formatNumber(s.signal?.sl, 2)}</span>
       <span class="wf-tag">Target: ${formatNumber(s.signal?.target, 2)}</span>
       <a class="wf-btn" href="/stock.html?symbol=${encodeURIComponent(s.symbol)}">Open</a>
+      <button class="wf-btn" onclick="removeFromWatchlist('${s.symbol}')" style="background:#ff4444;border-color:#ff4444;color:white">Remove</button>
     </div>
   </div>`;
 }
@@ -218,6 +219,25 @@ function renderScreener() {
   run();
 }
 
+async function removeFromWatchlist(symbol) {
+  try {
+    const result = await fetch(`${API_BASE}/watchlist/remove?symbol=${encodeURIComponent(symbol)}`, {
+      method: "POST"
+    });
+    
+    if (result.ok) {
+      // Reload the page to refresh the watchlist
+      location.reload();
+    } else {
+      console.error("Failed to remove from watchlist");
+      alert("Failed to remove from watchlist");
+    }
+  } catch (error) {
+    console.error("Error removing from watchlist:", error);
+    alert("Error removing from watchlist");
+  }
+}
+
 async function setupWatchlistButton(symbol) {
   const btn = document.getElementById("watchlist-btn");
   if (!btn) return;
@@ -250,10 +270,8 @@ async function setupWatchlistButton(symbol) {
         
         if (inWatchlist) {
           // Remove from watchlist
-          const result = await fetch(`${API_BASE}/watchlist/remove`, {
-            method: "POST",
-            headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({symbol: symbol})
+          const result = await fetch(`${API_BASE}/watchlist/remove?symbol=${encodeURIComponent(symbol)}`, {
+            method: "POST"
           });
           if (result.ok) {
             btn.textContent = "Add to Watchlist";
@@ -263,10 +281,8 @@ async function setupWatchlistButton(symbol) {
           }
         } else {
           // Add to watchlist  
-          const result = await fetch(`${API_BASE}/watchlist/add`, {
-            method: "POST",
-            headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({symbol: symbol})
+          const result = await fetch(`${API_BASE}/watchlist/add?symbol=${encodeURIComponent(symbol)}`, {
+            method: "POST"
           });
           if (result.ok) {
             btn.textContent = "Remove from Watchlist";
