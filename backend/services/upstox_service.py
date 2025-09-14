@@ -334,19 +334,60 @@ class UpstoxService:
                 "upper_circuit": quote_data.get("upper_circuit_limit", 0),
                 "lower_circuit": quote_data.get("lower_circuit_limit", 0),
                 "timestamp": datetime.now().isoformat(),
-                # Mock technical indicators (would need separate calculation)
-                "rsi": 50.0,  # Placeholder
-                "ma20": last_price * 0.98,  # Placeholder
-                "ma50": last_price * 0.95,  # Placeholder
-                "ma200": last_price * 0.90,  # Placeholder
-                "sentiment": "NEUTRAL",  # Placeholder
+            }
+            
+            # Get historical data for technical analysis
+            historical_data = self.get_historical_data(symbol)
+            if historical_data and len(historical_data) > 0:
+                # Extract closing prices from historical data
+                close_prices = []
+                for candle in historical_data:
+                    if isinstance(candle, list) and len(candle) >= 4:
+                        # Format: [timestamp, open, high, low, close, volume]
+                        close_prices.append(float(candle[4]))
+                
+                # Add current price to the end
+                close_prices.append(last_price)
+                
+                # Calculate technical indicators
+                rsi = self.calculate_rsi(close_prices)
+                moving_averages = self.calculate_moving_averages(close_prices)
+                bollinger_bands = self.calculate_bollinger_bands(close_prices)
+                
+                # Update result with calculated values
+                result.update({
+                    "rsi": rsi,
+                    "ma20": moving_averages["ma20"],
+                    "ma50": moving_averages["ma50"], 
+                    "ma200": moving_averages["ma200"],
+                    "bb_upper": bollinger_bands["upper"],
+                    "bb_middle": bollinger_bands["middle"],
+                    "bb_lower": bollinger_bands["lower"]
+                })
+            else:
+                # Fallback values if no historical data
+                result.update({
+                    "rsi": 50.0,
+                    "ma20": last_price * 0.98,
+                    "ma50": last_price * 0.95,
+                    "ma200": last_price * 0.90,
+                    "bb_upper": last_price * 1.02,
+                    "bb_middle": last_price,
+                    "bb_lower": last_price * 0.98
+                })
+            
+            # Add sentiment and signal
+            result.update({
+                "sentiment": "NEUTRAL",
                 "signal": {
                     "direction": "HOLD",
                     "entry": last_price,
                     "sl": round(last_price * 0.95, 2),
                     "target": round(last_price * 1.05, 2)
                 }
-            }
+            })
+            
+            return result
         except Exception as e:
             logger.error(f"Error formatting stock data: {e}")
             return self._get_fallback_data(symbol)
@@ -370,10 +411,13 @@ class UpstoxService:
             "upper_circuit": 0.0,
             "lower_circuit": 0.0,
             "timestamp": datetime.now().isoformat(),
-            "rsi": 0.0,
+            "rsi": 50.0,
             "ma20": 0.0,
             "ma50": 0.0,
             "ma200": 0.0,
+            "bb_upper": 0.0,
+            "bb_middle": 0.0,
+            "bb_lower": 0.0,
             "sentiment": "UNKNOWN",
             "signal": {
                 "direction": "-",
@@ -383,6 +427,81 @@ class UpstoxService:
             },
             "error": "API data unavailable"
         }
+
+    def calculate_rsi(self, prices: List[float], period: int = 14) -> float:
+        """Calculate RSI (Relative Strength Index)"""
+        if len(prices) < period + 1:
+            return 50.0  # Default if insufficient data
+        
+        try:
+            # Calculate price changes
+            changes = [prices[i] - prices[i-1] for i in range(1, len(prices))]
+            
+            # Separate gains and losses
+            gains = [max(change, 0) for change in changes]
+            losses = [-min(change, 0) for change in changes]
+            
+            # Calculate average gains and losses
+            avg_gain = sum(gains[:period]) / period
+            avg_loss = sum(losses[:period]) / period
+            
+            # Calculate subsequent gains and losses using smoothing
+            for i in range(period, len(gains)):
+                avg_gain = (avg_gain * (period - 1) + gains[i]) / period
+                avg_loss = (avg_loss * (period - 1) + losses[i]) / period
+            
+            # Calculate RSI
+            if avg_loss == 0:
+                return 100.0
+            
+            rs = avg_gain / avg_loss
+            rsi = 100 - (100 / (1 + rs))
+            return round(rsi, 1)
+        except:
+            return 50.0
+
+    def calculate_bollinger_bands(self, prices: List[float], period: int = 20, std_dev: float = 2.0) -> Dict[str, float]:
+        """Calculate Bollinger Bands"""
+        if len(prices) < period:
+            return {"upper": 0.0, "middle": 0.0, "lower": 0.0}
+        
+        try:
+            # Get the last 'period' prices
+            recent_prices = prices[-period:]
+            
+            # Calculate SMA (Simple Moving Average)
+            sma = sum(recent_prices) / len(recent_prices)
+            
+            # Calculate standard deviation
+            variance = sum([(price - sma) ** 2 for price in recent_prices]) / len(recent_prices)
+            std = variance ** 0.5
+            
+            # Calculate bands
+            upper_band = sma + (std_dev * std)
+            lower_band = sma - (std_dev * std)
+            
+            return {
+                "upper": round(upper_band, 2),
+                "middle": round(sma, 2),
+                "lower": round(lower_band, 2)
+            }
+        except:
+            return {"upper": 0.0, "middle": 0.0, "lower": 0.0}
+
+    def calculate_moving_averages(self, prices: List[float]) -> Dict[str, float]:
+        """Calculate moving averages"""
+        try:
+            ma20 = sum(prices[-20:]) / min(20, len(prices)) if len(prices) >= 1 else 0.0
+            ma50 = sum(prices[-50:]) / min(50, len(prices)) if len(prices) >= 1 else 0.0
+            ma200 = sum(prices[-200:]) / min(200, len(prices)) if len(prices) >= 1 else 0.0
+            
+            return {
+                "ma20": round(ma20, 2),
+                "ma50": round(ma50, 2),
+                "ma200": round(ma200, 2)
+            }
+        except:
+            return {"ma20": 0.0, "ma50": 0.0, "ma200": 0.0}
 
 # Global service instance
 upstox_service = UpstoxService()

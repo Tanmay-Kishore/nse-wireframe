@@ -70,14 +70,17 @@ a{color:var(--text);text-decoration:none}
 .wf-card-head{font-weight:600;margin-bottom:10px;display:flex;align-items:center;gap:10px;justify-content:space-between}
 .wf-grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
 .wf-grid-2{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
-.wf-stock-card{border:1px dashed var(--outline);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px}
-.wf-stock-head{display:flex;justify-content:space-between;align-items:center}
+.wf-stock-card{border:1px dashed var(--outline);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:10px;min-height:220px;max-width:100%;overflow:hidden}
+.wf-stock-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
 .wf-tag{font-size:12px;border:1px dashed var(--outline);padding:2px 6px;border-radius:9999px;color:var(--muted)}
 .wf-pill{font-size:12px;border:1px dashed var(--outline);padding:2px 8px;border-radius:9999px}
 .wf-pill.buy{border-color:var(--buy);color:var(--buy)}
 .wf-pill.sell{border-color:var(--sell);color:var(--sell)}
-.wf-metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;font-size:13px;color:var(--muted)}
-.wf-kv{display:flex;justify-content:space-between;border:1px dashed var(--outline);border-radius:8px;padding:6px}
+.wf-metrics{display:grid;grid-template-columns:0.7fr 1.3fr;gap:4px;font-size:12px;color:var(--muted)}
+.wf-metrics-wide{grid-column:1/-1}
+.wf-kv{display:flex;justify-content:space-between;border:1px dashed var(--outline);border-radius:6px;padding:5px 8px;min-height:26px;align-items:center;word-wrap:break-word;overflow:hidden}
+.wf-kv.compact{font-size:11px;padding:3px 6px;min-height:22px}
+.wf-kv span:last-child{text-align:right;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .wf-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
 .wf-alert{display:flex;justify-content:space-between;gap:10px;border:1px dashed var(--outline);border-radius:10px;padding:8px}
 .wf-alert.buy{border-color:var(--buy)}

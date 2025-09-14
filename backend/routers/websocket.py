@@ -2,11 +2,13 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
 from typing import Optional
 import asyncio, json, os
 from services.upstox_service import get_upstox_service
+from services.alert_service import get_alert_service
 
 
 router = APIRouter(tags=["websocket"])
 instruments_path = os.path.join(os.path.dirname(__file__), '../data/instruments.json')
 upstox_service = get_upstox_service()
+alert_service = get_alert_service()
 
 @router.websocket("/ws/screener")
 async def ws_screener(websocket: WebSocket):
@@ -63,6 +65,21 @@ async def ws_screener(websocket: WebSocket):
                 
                 # Format using the existing formatter
                 formatted_stock_data = upstox_service.format_stock_data(symbol, quote_data)
+                
+                # Check for Bollinger Band alerts
+                if formatted_stock_data.get("bb_upper") and formatted_stock_data.get("bb_lower"):
+                    alert_message = await alert_service.check_bollinger_band_crosses(
+                        symbol,
+                        formatted_stock_data["price"],
+                        formatted_stock_data["bb_upper"],
+                        formatted_stock_data["bb_lower"]
+                    )
+                    
+                    if alert_message:
+                        # Send Telegram alert
+                        alert_sent = await alert_service.send_telegram_alert(alert_message)
+                        if alert_sent:
+                            print(f"Bollinger Band alert sent for {symbol}")
                 
                 # Send formatted data to frontend
                 response = {

@@ -174,6 +174,16 @@ async def get_stock(symbol: str):
         s["error"] = str(e)
         return s
     
+@router.get("/watchlist/check/{symbol}")
+async def check_watchlist_status(symbol: str):
+    """Check if a symbol is in the watchlist"""
+    symbol = symbol.upper()
+    try:
+        symbols = get_watchlist_symbols()
+        return {"symbol": symbol, "in_watchlist": symbol in symbols}
+    except Exception as e:
+        return {"symbol": symbol, "in_watchlist": False, "error": str(e)}
+
 @router.post("/watchlist/add")
 async def add_to_watchlist(symbol: str):
     """Add a stock symbol to the watchlist"""

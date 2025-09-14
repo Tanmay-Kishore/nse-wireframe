@@ -15,26 +15,37 @@ async function getJSON(path) {
 }
 
 function stockCard(s) {
+  // Helper function to safely format numbers
+  const formatNumber = (value, decimals = 2) => {
+    if (value == null || value === undefined || isNaN(value)) return "-";
+    return Number(value).toFixed(decimals);
+  };
+  
+  const formatVolume = (volume) => {
+    if (!volume || volume === 0) return "-";
+    return Number(volume).toLocaleString();
+  };
+  
   return `<div class="wf-stock-card">
     <div class="wf-stock-head">
       <div><strong>${s.symbol}</strong> <span class="wf-tag">${s.name || ""}</span></div>
       <div class="wf-pill ${s.signal?.direction === "BUY" ? "buy" : (s.signal?.direction === "SELL" ? "sell" : "")}">
-        ${s.signal?.direction || "-"}
+        ${s.signal?.direction || "HOLD"}
       </div>
     </div>
     <div class="wf-metrics">
-      <div class="wf-kv"><span>Price</span><span>${s.price?.toFixed(2)}</span></div>
-      <div class="wf-kv"><span>% Gap</span><span>${s.gap?.toFixed(2)}%</span></div>
-      <div class="wf-kv"><span>Vol</span><span>${s.volume}</span></div>
-      <div class="wf-kv"><span>VWAP</span><span>${s.vwap?.toFixed(2)}</span></div>
-      <div class="wf-kv"><span>RSI</span><span>${s.rsi?.toFixed(1)}</span></div>
-      <div class="wf-kv"><span>MA20/50/200</span><span>${s.ma20?.toFixed(2)} / ${s.ma50?.toFixed(2)} / ${s.ma200?.toFixed(2)}</span></div>
+      <div class="wf-kv"><span>Price</span><span>₹${formatNumber(s.price, 2)}</span></div>
+      <div class="wf-kv"><span>Volume</span><span>${formatVolume(s.volume)}</span></div>
+      <div class="wf-kv"><span>Gap</span><span>${formatNumber(s.gap, 2)}%</span></div>
+      <div class="wf-kv"><span>VWAP</span><span>₹${formatNumber(s.vwap, 2)}</span></div>
+      <div class="wf-kv"><span>RSI</span><span>${formatNumber(s.rsi, 1)}</span></div>
+      <div class="wf-kv compact"><span>Bollinger</span><span>${formatNumber(s.bb_upper, 0)}/${formatNumber(s.bb_lower, 0)}</span></div>
+      <div class="wf-kv compact wf-metrics-wide"><span>MA20/50/200</span><span>${formatNumber(s.ma20, 0)}/${formatNumber(s.ma50, 0)}/${formatNumber(s.ma200, 0)}</span></div>
     </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <span class="wf-tag">Sent: ${s.sentiment || "-"}</span>
-      <span class="wf-tag">Entry: ${s.signal?.entry ?? "-"}</span>
-      <span class="wf-tag">SL: ${s.signal?.sl ?? "-"}</span>
-      <span class="wf-tag">Target: ${s.signal?.target ?? "-"}</span>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:auto">
+      <span class="wf-tag">Entry: ${formatNumber(s.signal?.entry, 2)}</span>
+      <span class="wf-tag">SL: ${formatNumber(s.signal?.sl, 2)}</span>
+      <span class="wf-tag">Target: ${formatNumber(s.signal?.target, 2)}</span>
       <a class="wf-btn" href="/stock.html?symbol=${encodeURIComponent(s.symbol)}">Open</a>
     </div>
   </div>`;
@@ -97,12 +108,6 @@ function renderOverview() {
             <div class="wf-kv"><span>Low</span><span>${live.low ?? '-'}</span></div>
             <div class="wf-kv"><span>Close</span><span>${live.close ?? '-'}</span></div>
             <div class="wf-kv"><span>Volume</span><span>${live.volume ?? '-'}</span></div>
-          </div>
-          <div class="wf-metrics" style="margin-top:8px;font-size:0.95em;">
-            <div class="wf-kv"><span>Prev Open</span><span>${prev.open ?? '-'}</span></div>
-            <div class="wf-kv"><span>Prev High</span><span>${prev.high ?? '-'}</span></div>
-            <div class="wf-kv"><span>Prev Low</span><span>${prev.low ?? '-'}</span></div>
-            <div class="wf-kv"><span>Prev Close</span><span>${prev.close ?? '-'}</span></div>
           </div>
         </div>`;
     }).join("");
@@ -211,6 +216,78 @@ function renderScreener() {
   }
 
   run();
+}
+
+async function setupWatchlistButton(symbol) {
+  const btn = document.getElementById("watchlist-btn");
+  if (!btn) return;
+  
+  try {
+    // Check current watchlist status
+    const response = await getJSON(`/watchlist/check/${encodeURIComponent(symbol)}`);
+    const inWatchlist = response.in_watchlist;
+    
+    // Set button text and style
+    if (inWatchlist) {
+      btn.textContent = "Remove from Watchlist";
+      btn.className = "wf-btn";
+      btn.style.background = "#ff4444";
+      btn.style.borderColor = "#ff4444";
+      btn.style.color = "white";
+    } else {
+      btn.textContent = "Add to Watchlist";
+      btn.className = "wf-btn";
+      btn.style.background = "#22c55e";
+      btn.style.borderColor = "#22c55e";
+      btn.style.color = "white";
+    }
+    
+    // Add click handler
+    btn.onclick = async () => {
+      try {
+        btn.disabled = true;
+        btn.textContent = "Loading...";
+        
+        if (inWatchlist) {
+          // Remove from watchlist
+          const result = await fetch(`${API_BASE}/watchlist/remove`, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({symbol: symbol})
+          });
+          if (result.ok) {
+            btn.textContent = "Add to Watchlist";
+            btn.style.background = "#22c55e";
+            btn.style.borderColor = "#22c55e";
+            btn.onclick = () => location.reload(); // Quick refresh
+          }
+        } else {
+          // Add to watchlist  
+          const result = await fetch(`${API_BASE}/watchlist/add`, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({symbol: symbol})
+          });
+          if (result.ok) {
+            btn.textContent = "Remove from Watchlist";
+            btn.style.background = "#ff4444";
+            btn.style.borderColor = "#ff4444";
+            btn.onclick = () => location.reload(); // Quick refresh
+          }
+        }
+        
+        btn.disabled = false;
+      } catch (error) {
+        console.error("Error updating watchlist:", error);
+        btn.disabled = false;
+        btn.textContent = "Error";
+      }
+    };
+    
+  } catch (error) {
+    console.error("Error setting up watchlist button:", error);
+    btn.textContent = "Error";
+  }
 }
 
 function renderStock() {
@@ -412,21 +489,49 @@ function renderStock() {
   const title = document.getElementById("stock-title");
   title.textContent = `${symbol} · Stock Detail`;
 
+  // Setup watchlist button
+  setupWatchlistButton(symbol);
+  
   getJSON(`/stocks/${encodeURIComponent(symbol)}`).then(s => {
+    console.log("Stock data received:", s); // Debug log
+    
+    // Helper function to safely format numbers
+    const formatNumber = (value, decimals = 2) => {
+      if (value == null || value === undefined || isNaN(value)) return "-";
+      return Number(value).toFixed(decimals);
+    };
+    
+    const formatVolume = (volume) => {
+      if (!volume || volume === 0) return "-";
+      return Number(volume).toLocaleString();
+    };
+    
     const k = document.getElementById("stock-metrics");
     k.innerHTML = `
-      <div class="wf-kv"><span>Price</span><span id="rt-price">${s.price.toFixed(2)}</span></div>
-      <div class="wf-kv"><span>% Gap</span><span>${s.gap.toFixed(2)}%</span></div>
-      <div class="wf-kv"><span>Volume</span><span>${s.volume}</span></div>
-      <div class="wf-kv"><span>VWAP</span><span>${s.vwap.toFixed(2)}</span></div>
-      <div class="wf-kv"><span>RSI</span><span>${s.rsi.toFixed(1)}</span></div>
-      <div class="wf-kv"><span>MA20/50/200</span><span>${s.ma20.toFixed(2)} / ${s.ma50.toFixed(2)} / ${s.ma200.toFixed(2)}</span></div>
-      <div class="wf-kv"><span>Entry/SL/Target</span><span>${s.signal.entry} / ${s.signal.sl} / ${s.signal.target}</span></div>
-      <div class="wf-kv"><span>Sentiment</span><span>${s.sentiment}</span></div>
+      <div class="wf-kv"><span>Price</span><span id="rt-price">₹${formatNumber(s.price, 2)}</span></div>
+      <div class="wf-kv"><span>Gap</span><span id="rt-gap">${formatNumber(s.gap, 2)}%</span></div>
+      <div class="wf-kv"><span>Volume</span><span id="rt-volume">${formatVolume(s.volume)}</span></div>
+      <div class="wf-kv"><span>VWAP</span><span id="rt-vwap">₹${formatNumber(s.vwap, 2)}</span></div>
+      <div class="wf-kv"><span>RSI</span><span id="rt-rsi">${formatNumber(s.rsi, 1)}</span></div>
+      <div class="wf-kv"><span>Bollinger</span><span>${formatNumber(s.bb_upper, 0)}/${formatNumber(s.bb_lower, 0)}</span></div>
+      <div class="wf-kv"><span>MA20/50/200</span><span id="rt-ma">${formatNumber(s.ma20, 0)}/${formatNumber(s.ma50, 0)}/${formatNumber(s.ma200, 0)}</span></div>
+      <div class="wf-kv"><span>Entry/SL/Target</span><span>${formatNumber(s.signal?.entry, 2)}/${formatNumber(s.signal?.sl, 2)}/${formatNumber(s.signal?.target, 2)}</span></div>
+      <div class="wf-kv"><span>Sentiment</span><span>${s.sentiment || "NEUTRAL"}</span></div>
     `;
-    // Alerts list
+    
+    // Alerts list - handle missing alerts gracefully
     const al = document.getElementById("stock-alerts");
-    al.innerHTML = s.alerts.map(a => `<li class="wf-alert ${a.severity}"><div>${a.message}</div><div class="wf-tag">${new Date(a.ts).toLocaleTimeString()}</div></li>`).join("");
+    if (al && s.alerts && Array.isArray(s.alerts)) {
+      al.innerHTML = s.alerts.map(a => `<li class="wf-alert ${a.severity}"><div>${a.message}</div><div class="wf-tag">${new Date(a.ts).toLocaleTimeString()}</div></li>`).join("");
+    } else if (al) {
+      al.innerHTML = "<li>No alerts yet</li>";
+    }
+  }).catch(error => {
+    console.error("Error loading stock data:", error);
+    const k = document.getElementById("stock-metrics");
+    if (k) {
+      k.innerHTML = `<div class="wf-kv"><span>Error</span><span>Failed to load stock data</span></div>`;
+    }
   });
 
 // WebSocket for real-time price updates
