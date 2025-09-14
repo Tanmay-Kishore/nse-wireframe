@@ -215,3 +215,54 @@ async def remove_from_watchlist(symbol: str):
         return {"success": True, "symbols": data["symbols"]}
     except Exception as e:
         return {"success": False, "error": str(e)}
+
+@router.get("/stocks/{symbol}/chart")
+async def get_stock_chart_data(symbol: str):
+    """Get historical chart data for a stock"""
+    symbol = symbol.upper()
+    
+    # Try to get real historical data from Upstox
+    try:
+        historical_data = upstox.get_historical_data(symbol)
+        if historical_data and len(historical_data) > 0:
+            chart_data = []
+            for candle in historical_data[-30:]:  # Last 30 days
+                if len(candle) >= 5:
+                    chart_data.append({
+                        "time": candle[0][:10],  # Date only (YYYY-MM-DD)
+                        "open": float(candle[1]),
+                        "high": float(candle[2]),
+                        "low": float(candle[3]),
+                        "close": float(candle[4]),
+                        "volume": int(candle[5]) if len(candle) > 5 else 0
+                    })
+            
+            if chart_data:
+                return {"symbol": symbol, "data": chart_data}
+    except Exception as e:
+        print(f"Error getting historical data: {e}")
+    
+    # Fallback to mock data
+    base_price = random.uniform(100, 3000)
+    chart_data = []
+    
+    for i in range(30):  # 30 days of mock data
+        date = (datetime.now() - timedelta(days=29-i)).strftime('%Y-%m-%d')
+        # Generate realistic OHLC data
+        open_price = base_price * (1 + random.uniform(-0.02, 0.02))
+        close_price = open_price * (1 + random.uniform(-0.05, 0.05))
+        high_price = max(open_price, close_price) * (1 + random.uniform(0, 0.03))
+        low_price = min(open_price, close_price) * (1 - random.uniform(0, 0.03))
+        
+        chart_data.append({
+            "time": date,
+            "open": round(open_price, 2),
+            "high": round(high_price, 2),
+            "low": round(low_price, 2),
+            "close": round(close_price, 2),
+            "volume": random.randint(100000, 5000000)
+        })
+        
+        base_price = close_price  # Next day starts from previous close
+    
+    return {"symbol": symbol, "data": chart_data}

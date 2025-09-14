@@ -47,7 +47,7 @@ function stockCard(s) {
       <span class="wf-tag">SL: ${formatNumber(s.signal?.sl, 2)}</span>
       <span class="wf-tag">Target: ${formatNumber(s.signal?.target, 2)}</span>
       <a class="wf-btn" href="/stock.html?symbol=${encodeURIComponent(s.symbol)}">Open</a>
-      <button class="wf-btn" onclick="removeFromWatchlist('${s.symbol}')" style="background:#ff4444;border-color:#ff4444;color:white">Remove</button>
+      <button class="wf-pill-btn remove" onclick="removeFromWatchlist('${s.symbol}')">Remove</button>
     </div>
   </div>`;
 }
@@ -238,6 +238,152 @@ async function removeFromWatchlist(symbol) {
   }
 }
 
+async function setupCandlestickChart(symbol) {
+  const chartContainer = document.getElementById('chart-container');
+  if (!chartContainer) {
+    console.log("Chart container not found");
+    return;
+  }
+
+  // Check if LightweightCharts is available
+  if (!window.LightweightCharts) {
+    console.log("LightweightCharts not loaded, waiting...");
+    // Wait for the library to load
+    setTimeout(() => setupCandlestickChart(symbol), 500);
+    return;
+  }
+  
+  console.log("LightweightCharts available:", typeof window.LightweightCharts);
+  console.log("createChart method:", typeof window.LightweightCharts.createChart);
+
+  try {
+    console.log(`Setting up chart for ${symbol}...`);
+    
+    // Fetch chart data
+    const chartData = await getJSON(`/stocks/${encodeURIComponent(symbol)}/chart`);
+    console.log("Chart data received:", chartData);
+    
+    if (!chartData || !chartData.data || chartData.data.length === 0) {
+      console.log("No chart data available");
+      chartContainer.innerHTML = '<div style="padding: 20px; text-align: center; color: #888;">No chart data available</div>';
+      return;
+    }
+
+    // Clear container first
+    chartContainer.innerHTML = '';
+
+    // Create chart
+    const chart = LightweightCharts.createChart(chartContainer, {
+      width: chartContainer.offsetWidth,
+      height: 400,
+      layout: {
+        backgroundColor: '#222',
+        textColor: '#DDD',
+      },
+      grid: {
+        vertLines: { 
+          color: 'rgba(70, 130, 180, 0.5)',
+          style: 1,
+        },
+        horzLines: { 
+          color: 'rgba(70, 130, 180, 0.5)',
+          style: 1,
+        },
+      },
+      crosshair: {
+        mode: LightweightCharts.CrosshairMode.Normal,
+        vertLine: {
+          color: '#758696',
+        },
+        horzLine: {
+          color: '#758696',
+        },
+      },
+      priceScale: {
+        borderColor: '#485c7b',
+      },
+      timeScale: {
+        borderColor: '#485c7b',
+        timeVisible: true,
+        secondsVisible: false,
+      },
+    });
+
+    // Add candlestick series
+    const candlestickSeries = chart.addCandlestickSeries({
+      upColor: '#4bffb5',
+      downColor: '#ff4976',
+      borderDownColor: '#ff4976',
+      borderUpColor: '#4bffb5',
+      wickDownColor: '#ff4976',
+      wickUpColor: '#4bffb5',
+    });
+
+    // Process and set data
+    const processedData = chartData.data
+      .map(item => {
+        console.log("Processing data item:", item);
+        
+        // Ensure all values are valid numbers
+        const open = parseFloat(item.open);
+        const high = parseFloat(item.high);
+        const low = parseFloat(item.low);
+        const close = parseFloat(item.close);
+        
+        // Skip invalid data points
+        if (isNaN(open) || isNaN(high) || isNaN(low) || isNaN(close)) {
+          console.warn("Skipping invalid data point:", item);
+          return null;
+        }
+        
+        // Ensure high >= max(open, close) and low <= min(open, close)
+        const actualHigh = Math.max(high, open, close);
+        const actualLow = Math.min(low, open, close);
+        
+        return {
+          time: item.time, // Date format: YYYY-MM-DD
+          open: open,
+          high: actualHigh,
+          low: actualLow,
+          close: close,
+        };
+      })
+      .filter(item => item !== null) // Remove invalid items
+      .sort((a, b) => a.time.localeCompare(b.time)); // Sort by date
+
+    console.log("Processed data for chart:", processedData);
+    console.log("Sample data point:", processedData[0]);
+    
+    if (processedData.length === 0) {
+      chartContainer.innerHTML = '<div style="padding: 20px; text-align: center; color: #888;">No valid chart data available</div>';
+      return;
+    }
+    
+    candlestickSeries.setData(processedData);
+
+    // Fit content to show the data
+    chart.timeScale().fitContent();
+
+    // Make chart responsive
+    const resizeChart = () => {
+      chart.applyOptions({ width: chartContainer.offsetWidth });
+    };
+
+    window.addEventListener('resize', resizeChart);
+
+    console.log(`Chart created successfully for ${symbol} with ${processedData.length} data points`);
+    
+    // Add a small delay to ensure the chart renders properly
+    setTimeout(() => {
+      chart.timeScale().fitContent();
+    }, 100);
+
+  } catch (error) {
+    console.error("Error setting up candlestick chart:", error);
+    chartContainer.innerHTML = '<div style="padding: 20px; text-align: center; color: #888;">Failed to load chart: ' + error.message + '</div>';
+  }
+}
+
 async function setupWatchlistButton(symbol) {
   const btn = document.getElementById("watchlist-btn");
   if (!btn) return;
@@ -250,16 +396,16 @@ async function setupWatchlistButton(symbol) {
     // Set button text and style
     if (inWatchlist) {
       btn.textContent = "Remove from Watchlist";
-      btn.className = "wf-btn";
-      btn.style.background = "#ff4444";
-      btn.style.borderColor = "#ff4444";
-      btn.style.color = "white";
+      btn.className = "wf-pill-btn remove";
+      btn.style.background = "";
+      btn.style.borderColor = "";
+      btn.style.color = "";
     } else {
       btn.textContent = "Add to Watchlist";
-      btn.className = "wf-btn";
-      btn.style.background = "#22c55e";
-      btn.style.borderColor = "#22c55e";
-      btn.style.color = "white";
+      btn.className = "wf-pill-btn add";
+      btn.style.background = "";
+      btn.style.borderColor = "";
+      btn.style.color = "";
     }
     
     // Add click handler
@@ -275,8 +421,7 @@ async function setupWatchlistButton(symbol) {
           });
           if (result.ok) {
             btn.textContent = "Add to Watchlist";
-            btn.style.background = "#22c55e";
-            btn.style.borderColor = "#22c55e";
+            btn.className = "wf-pill-btn add";
             btn.onclick = () => location.reload(); // Quick refresh
           }
         } else {
@@ -286,8 +431,7 @@ async function setupWatchlistButton(symbol) {
           });
           if (result.ok) {
             btn.textContent = "Remove from Watchlist";
-            btn.style.background = "#ff4444";
-            btn.style.borderColor = "#ff4444";
+            btn.className = "wf-pill-btn remove";
             btn.onclick = () => location.reload(); // Quick refresh
           }
         }
@@ -507,6 +651,9 @@ function renderStock() {
 
   // Setup watchlist button
   setupWatchlistButton(symbol);
+  
+  // Setup candlestick chart
+  setupCandlestickChart(symbol);
   
   getJSON(`/stocks/${encodeURIComponent(symbol)}`).then(s => {
     console.log("Stock data received:", s); // Debug log
