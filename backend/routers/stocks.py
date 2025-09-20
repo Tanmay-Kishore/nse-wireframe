@@ -3,7 +3,7 @@ from typing import Optional
 import random
 from datetime import datetime, timedelta
 import os, json, logging
-from services.upstox_service import get_upstox_service
+from services.upstox_service import get_upstox_service, get_market_status
 
 upstox = get_upstox_service()
 instruments_path = os.path.join(os.path.dirname(__file__), '../data/instruments.json')

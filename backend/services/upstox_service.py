@@ -5,6 +5,7 @@ Handles real-time market data fetching from Upstox API
 
 import logging, os
 import requests
+import asyncio
 from typing import Dict, List, Optional, Any
 from datetime import datetime, timedelta
 import json
@@ -24,125 +25,207 @@ class UpstoxService:
         self.access_token = None
         self.api_key = None
         self.api_secret = None
+        self.last_tick_cache = {}
         self._load_config()
 
     async def subscribe_price_stream(self, instrument_keys):
         """
         Connects to Upstox WebSocket and yields live ticks for the given instrument_keys, decoding protobuf messages.
         Aligned to Upstox official example: uses authorized websocket URL, SSL context, and correct subscribe message format.
+        
+        Features:
+        - Market hours checking to avoid unnecessary reconnections
+        - Exponential backoff for reconnection attempts
+        - Cache last ticks for use when market is closed
         """
-        # Step 1: Get authorized websocket URL
-        try:
-            auth_url = f"{self.base_url}/feed/market-data-feed/authorize"
-            headers = {
-                "Authorization": f"Bearer {self.access_token}",
-                "Accept": "application/json"
-            }
-            resp = requests.get(auth_url, headers=headers, timeout=10)
-            resp.raise_for_status()
-            auth_data = resp.json()
-            ws_url = auth_data["data"]["authorized_redirect_uri"]
-        except Exception as e:
-            logger.error(f"Failed to get authorized websocket URL: {e}")
+        # Check if market is open
+        if not is_market_open():
+            logger.info("Market is closed. Using cached data or returning mock data.")
+            
+            # Return cached ticks or generate mock data for each instrument key
+            for key in instrument_keys:
+                # Look for cached tick
+                cached_tick = self.last_tick_cache.get(key)
+                if cached_tick:
+                    cached_tick["cached"] = True
+                    yield cached_tick
+                else:
+                    # Create mock tick data
+                    mock_tick = {
+                        "ltp": 0,
+                        "open": 0,
+                        "high": 0,
+                        "low": 0,
+                        "close": 0,
+                        "vol": 0,
+                        "instrument_key": key,
+                        "cached": True,
+                        "mock": True,
+                        "market_status": "CLOSED",
+                        "next_market_event": get_market_status()["next_event"]
+                    }
+                    yield mock_tick
+            
+            # Don't proceed with websocket connection when market is closed
             return
-
-        # Step 2: Create SSL context
-        import ssl
-        ssl_context = ssl.create_default_context()
-        ssl_context.check_hostname = False
-        ssl_context.verify_mode = ssl.CERT_NONE
-
-        # Step 3: Connect to websocket
-        async with websockets.connect(ws_url, ssl=ssl_context) as ws:
-            # Step 4: Send subscribe message (use 'instrumentKeys' camelCase)
-            subscribe_msg = {
-                "guid": "client-1",
-                "method": "sub",
-                "data": {
-                    "mode": "full",
-                    "instrumentKeys": instrument_keys
+            
+        # Exponential backoff parameters
+        max_retries = 5
+        base_delay = 2  # seconds
+        retry_count = 0
+        
+        while retry_count < max_retries:
+            try:
+                # Step 1: Get authorized websocket URL
+                auth_url = f"{self.base_url}/feed/market-data-feed/authorize"
+                headers = {
+                    "Authorization": f"Bearer {self.access_token}",
+                    "Accept": "application/json"
                 }
-            }
-            await ws.send(json.dumps(subscribe_msg).encode('utf-8'))
-            # Step 5: Receive and decode messages
-            while True:
-                msg = await ws.recv()
-                try:
-                    # Try to decode as protobuf directly (Upstox v3)
-                    feed_response = market_data_feed_pb2.FeedResponse()
-                    if isinstance(msg, bytes):
-                        feed_response.ParseFromString(msg)
-                    else:
-                        # If message is JSON with base64 'data' field (older Upstox)
-                        msg_obj = json.loads(msg)
-                        if "data" in msg_obj:
-                            pb_bytes = base64.b64decode(msg_obj["data"])
-                            feed_response.ParseFromString(pb_bytes)
-                        else:
+                resp = requests.get(auth_url, headers=headers, timeout=10)
+                resp.raise_for_status()
+                auth_data = resp.json()
+                ws_url = auth_data["data"]["authorized_redirect_uri"]
+                
+                # Step 2: Create SSL context
+                import ssl
+                ssl_context = ssl.create_default_context()
+                ssl_context.check_hostname = False
+                ssl_context.verify_mode = ssl.CERT_NONE
+                
+                # Reset retry count on successful connection
+                retry_count = 0
+                logger.info(f"Connecting to Upstox websocket with {len(instrument_keys)} instruments")
+                
+                # Step 3: Connect to websocket
+                async with websockets.connect(ws_url, ssl=ssl_context, ping_interval=30, ping_timeout=10) as ws:
+                    # Step 4: Send subscribe message (use 'instrumentKeys' camelCase)
+                    subscribe_msg = {
+                        "guid": "client-1",
+                        "method": "sub",
+                        "data": {
+                            "mode": "full",
+                            "instrumentKeys": instrument_keys
+                        }
+                    }
+                    await ws.send(json.dumps(subscribe_msg).encode('utf-8'))
+                    logger.info(f"Subscription sent for {len(instrument_keys)} instruments")
+                    
+                    # Step 5: Receive and decode messages
+                    while True:
+                        # Check if market is still open
+                        if not is_market_open():
+                            logger.info("Market closed during websocket session. Stopping stream.")
+                            break
+                            
+                        msg = await ws.recv()
+                        try:
+                            # Try to decode as protobuf directly (Upstox v3)
+                            feed_response = market_data_feed_pb2.FeedResponse()
+                            if isinstance(msg, bytes):
+                                feed_response.ParseFromString(msg)
+                            else:
+                                # If message is JSON with base64 'data' field (older Upstox)
+                                msg_obj = json.loads(msg)
+                                if "data" in msg_obj:
+                                    pb_bytes = base64.b64decode(msg_obj["data"])
+                                    feed_response.ParseFromString(pb_bytes)
+                                else:
+                                    continue
+                            # Extract ticks for each instrument
+                            for key, feed in feed_response.feeds.items():
+                                tick = {}
+                                fields = [desc.name for desc, _ in feed.ListFields()]
+                                if "fullFeed" in fields:
+                                    full_feed = feed.fullFeed
+                                    # Parse marketFF under fullFeed
+                                    if full_feed.HasField("marketFF"):
+                                        market_ff = full_feed.marketFF
+                                        # Parse ltpc (last traded price info)
+                                        if market_ff.HasField("ltpc"):
+                                            tick["ltp"] = market_ff.ltpc.ltp
+                                            tick["ltt"] = market_ff.ltpc.ltt
+                                            tick["ltq"] = market_ff.ltpc.ltq
+                                            tick["cp"] = market_ff.ltpc.cp
+                                        # Parse bid/ask quotes (market depth)
+                                        if market_ff.HasField("marketLevel"):
+                                            bid_ask_quotes = []
+                                            for baq in market_ff.marketLevel.bidAskQuote:
+                                                bid_ask_quotes.append({
+                                                    "bidQ": baq.bidQ,
+                                                    "bidP": baq.bidP,
+                                                    "askQ": baq.askQ,
+                                                    "askP": baq.askP
+                                                })
+                                            tick["bid_ask_quotes"] = bid_ask_quotes
+                                        # Parse OHLC data
+                                        if market_ff.HasField("marketOHLC"):
+                                            ohlc_list = market_ff.marketOHLC.ohlc
+                                            ohlc_data = []
+                                            for ohlc in ohlc_list:
+                                                ohlc_data.append({
+                                                    "interval": ohlc.interval,
+                                                    "open": ohlc.open,
+                                                    "high": ohlc.high,
+                                                    "low": ohlc.low,
+                                                    "close": ohlc.close,
+                                                    "vol": ohlc.vol,
+                                                    "ts": ohlc.ts
+                                                })
+                                            tick["ohlc"] = ohlc_data
+                                            # For convenience, also set 1d OHLC as top-level fields if present
+                                            for ohlc in ohlc_data:
+                                                if ohlc["interval"] == "1d":
+                                                    tick["open"] = ohlc["open"]
+                                                    tick["high"] = ohlc["high"]
+                                                    tick["low"] = ohlc["low"]
+                                                    tick["close"] = ohlc["close"]
+                                                    tick["vol"] = ohlc["vol"]
+                                                    break
+                                        # Parse ATP, VTT, TBQ, TSQ (scalar fields, no HasField)
+                                        tick["atp"] = market_ff.atp
+                                        tick["vtt"] = market_ff.vtt
+                                        tick["tbq"] = market_ff.tbq
+                                        tick["tsq"] = market_ff.tsq
+                                        tick["instrument_key"] = key
+                                # Add more parsing as needed for other feed types
+                                if tick:
+                                    # Cache this tick
+                                    self.last_tick_cache[key] = tick
+                                    # Add market status
+                                    tick["market_status"] = "OPEN"
+                                    yield tick
+                        except Exception as e:
+                            logger.error(f"Error decoding Upstox tick: {e}")
                             continue
-                    # Extract ticks for each instrument
-                    for key, feed in feed_response.feeds.items():
-                        tick = {}
-                        fields = [desc.name for desc, _ in feed.ListFields()]
-                        if "fullFeed" in fields:
-                            full_feed = feed.fullFeed
-                            # Log the structure for debugging
-                            # Parse marketFF under fullFeed
-                            if full_feed.HasField("marketFF"):
-                                market_ff = full_feed.marketFF
-                                # Parse ltpc (last traded price info)
-                                if market_ff.HasField("ltpc"):
-                                    tick["ltp"] = market_ff.ltpc.ltp
-                                    tick["ltt"] = market_ff.ltpc.ltt
-                                    tick["ltq"] = market_ff.ltpc.ltq
-                                    tick["cp"] = market_ff.ltpc.cp
-                                # Parse bid/ask quotes (market depth)
-                                if market_ff.HasField("marketLevel"):
-                                    bid_ask_quotes = []
-                                    for baq in market_ff.marketLevel.bidAskQuote:
-                                        bid_ask_quotes.append({
-                                            "bidQ": baq.bidQ,
-                                            "bidP": baq.bidP,
-                                            "askQ": baq.askQ,
-                                            "askP": baq.askP
-                                        })
-                                    tick["bid_ask_quotes"] = bid_ask_quotes
-                                # Parse OHLC data
-                                if market_ff.HasField("marketOHLC"):
-                                    ohlc_list = market_ff.marketOHLC.ohlc
-                                    ohlc_data = []
-                                    for ohlc in ohlc_list:
-                                        ohlc_data.append({
-                                            "interval": ohlc.interval,
-                                            "open": ohlc.open,
-                                            "high": ohlc.high,
-                                            "low": ohlc.low,
-                                            "close": ohlc.close,
-                                            "vol": ohlc.vol,
-                                            "ts": ohlc.ts
-                                        })
-                                    tick["ohlc"] = ohlc_data
-                                    # For convenience, also set 1d OHLC as top-level fields if present
-                                    for ohlc in ohlc_data:
-                                        if ohlc["interval"] == "1d":
-                                            tick["open"] = ohlc["open"]
-                                            tick["high"] = ohlc["high"]
-                                            tick["low"] = ohlc["low"]
-                                            tick["close"] = ohlc["close"]
-                                            tick["vol"] = ohlc["vol"]
-                                            break
-                                # Parse ATP, VTT, TBQ, TSQ (scalar fields, no HasField)
-                                tick["atp"] = market_ff.atp
-                                tick["vtt"] = market_ff.vtt
-                                tick["tbq"] = market_ff.tbq
-                                tick["tsq"] = market_ff.tsq
-                                tick["instrument_key"] = key
-                        # Add more parsing as needed for other feed types
-                        if tick:
-                            yield tick
-                except Exception as e:
-                    logger.error(f"Error decoding Upstox tick: {e}")
-                    continue
+            
+            except websockets.exceptions.ConnectionClosedError as e:
+                # Connection closed, check if it's due to market being closed
+                if not is_market_open():
+                    logger.info("Market is now closed. Not attempting reconnection.")
+                    break
+                retry_count += 1
+                wait_time = min(60, base_delay * (2 ** retry_count))  # Exponential backoff, max 60s
+                logger.warning(f"WebSocket connection closed: {e}. Retry {retry_count}/{max_retries} in {wait_time}s")
+                await asyncio.sleep(wait_time)
+            
+            except Exception as e:
+                retry_count += 1
+                wait_time = min(60, base_delay * (2 ** retry_count))
+                logger.error(f"WebSocket error: {e}. Retry {retry_count}/{max_retries} in {wait_time}s")
+                await asyncio.sleep(wait_time)
+        
+        # If we've reached max retries or market closed, yield cached data
+        if retry_count >= max_retries:
+            logger.error(f"Max retries ({max_retries}) reached. Using cached data.")
+            
+        # Return any cached data we have for the requested instruments
+        for key in instrument_keys:
+            cached_tick = self.last_tick_cache.get(key)
+            if cached_tick:
+                cached_tick["cached"] = True
+                cached_tick["market_status"] = "CLOSED" if not is_market_open() else "ERROR"
+                yield cached_tick
     
     def _load_config(self):
         """Load Upstox configuration"""
@@ -513,3 +596,68 @@ def get_upstox_service() -> UpstoxService:
 def refresh_upstox_config():
     """Refresh Upstox configuration from file"""
     upstox_service._load_config()
+    
+    
+# Market hours related methods
+def is_market_open():
+    """
+    Check if the market is currently open based on typical NSE market hours.
+    
+    Returns:
+        bool: True if market is open, False otherwise
+    """
+    # India Standard Time (IST)
+    now = datetime.now()
+    
+    # NSE typically operates Monday to Friday
+    if now.weekday() > 4:  # 5 = Saturday, 6 = Sunday
+        return False
+    
+    # Market hours: 9:15 AM to 3:30 PM IST
+    market_start = now.replace(hour=9, minute=15, second=0, microsecond=0)
+    market_end = now.replace(hour=15, minute=30, second=0, microsecond=0)
+    
+    return market_start <= now <= market_end
+
+def get_market_status():
+    """
+    Get the current market status.
+    
+    Returns:
+        dict: Market status information
+    """
+    is_open = is_market_open()
+    
+    # Get the next opening/closing time
+    now = datetime.now()
+    today = now.date()
+    next_day = today + timedelta(days=1)
+    
+    # Handle weekends
+    if now.weekday() == 4 and now.hour >= 15:  # Friday after closing
+        next_day = today + timedelta(days=3)  # Next Monday
+    elif now.weekday() == 5:  # Saturday
+        next_day = today + timedelta(days=2)  # Next Monday
+    elif now.weekday() == 6:  # Sunday
+        next_day = today + timedelta(days=1)  # Next Monday
+        
+    # Set the next event time
+    if is_open:
+        next_event = datetime.combine(today, datetime.time(15, 30))
+        next_event_type = "closing"
+    else:
+        # If current time is after market close
+        if now.hour > 15 or (now.hour == 15 and now.minute >= 30):
+            # Set for next day's opening
+            next_event = datetime.combine(next_day, datetime.time(9, 15))
+            next_event_type = "opening"
+        else:
+            # Set for today's opening
+            next_event = datetime.combine(today, datetime.time(9, 15))
+            next_event_type = "opening"
+            
+    return {
+        "is_open": is_open,
+        "next_event": next_event.isoformat(),
+        "next_event_type": next_event_type
+    }
