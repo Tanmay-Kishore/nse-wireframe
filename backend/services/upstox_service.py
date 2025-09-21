@@ -400,7 +400,8 @@ class UpstoxService:
                         break
             except Exception:
                 pass
-            return {
+
+            result = {
                 "symbol": symbol,
                 "name": name,
                 "price": round(last_price, 2),
@@ -459,15 +460,18 @@ class UpstoxService:
                     "bb_lower": last_price * 0.98
                 })
             
+            # Calculate trading signal using strategy logic
+            signal_data = self.calculate_trading_signal(
+                symbol, last_price, result.get("rsi", 50),
+                result.get("ma20", last_price), result.get("ma50", last_price),
+                result.get("ma200", last_price), result.get("bb_upper", 0),
+                result.get("bb_middle", 0), result.get("bb_lower", 0)
+            )
+
             # Add sentiment and signal
             result.update({
-                "sentiment": "NEUTRAL",
-                "signal": {
-                    "direction": "HOLD",
-                    "entry": last_price,
-                    "sl": round(last_price * 0.95, 2),
-                    "target": round(last_price * 1.05, 2)
-                }
+                "sentiment": signal_data["sentiment"],
+                "signal": signal_data["signal"]
             })
             
             return result
@@ -577,7 +581,7 @@ class UpstoxService:
             ma20 = sum(prices[-20:]) / min(20, len(prices)) if len(prices) >= 1 else 0.0
             ma50 = sum(prices[-50:]) / min(50, len(prices)) if len(prices) >= 1 else 0.0
             ma200 = sum(prices[-200:]) / min(200, len(prices)) if len(prices) >= 1 else 0.0
-            
+
             return {
                 "ma20": round(ma20, 2),
                 "ma50": round(ma50, 2),
@@ -585,6 +589,281 @@ class UpstoxService:
             }
         except:
             return {"ma20": 0.0, "ma50": 0.0, "ma200": 0.0}
+
+    def calculate_trading_signal(self, symbol: str, current_price: float, rsi: float,
+                               ma20: float, ma50: float, ma200: float, bb_upper: float = 0,
+                               bb_middle: float = 0, bb_lower: float = 0) -> Dict:
+        """
+        Enhanced trading signal with Bollinger Bands integration:
+
+        Core AND Logic:
+        BUY: (Price > MA50 > MA200) AND (RSI > 40) AND (Price > MA20)
+        SELL: (Price < MA50 < MA200) AND (RSI < 60) AND (Price < MA20)
+
+        Bollinger Band Enhancements:
+        - Oversold bounce: Price touches BB Lower + RSI < 30
+        - Overbought rejection: Price touches BB Upper + RSI > 70
+        - Squeeze breakout: Price breaks out of tight bands
+        - Mean reversion: Price returns to BB Middle
+        """
+        try:
+            buy_conditions = []
+            sell_conditions = []
+            reasons = []
+
+            # Core AND Logic Conditions
+            # Relaxed conditions for real market scenarios
+            # BUY Signal Logic - More flexible for sideways markets
+            buy_condition_1 = (current_price > ma50 > ma200) or (ma50 >= ma200 * 0.999 and current_price > ma50)  # Bullish or sideways upward
+            buy_condition_2 = rsi > 40  # RSI momentum
+            buy_condition_3 = current_price > ma20 * 0.998  # Price above MA20 (with small buffer)
+
+            # SELL Signal Logic - More flexible for sideways markets
+            sell_condition_1 = (current_price < ma50 < ma200) or (ma50 <= ma200 * 1.001 and current_price < ma50)  # Bearish or sideways downward
+            sell_condition_2 = rsi < 60  # RSI momentum
+            sell_condition_3 = current_price < ma20 * 1.002  # Price below MA20 (with small buffer)
+
+            # Bollinger Bands Analysis (if available)
+            bb_buy_signals = 0
+            bb_sell_signals = 0
+            bb_reasons = []
+
+            if bb_upper > 0 and bb_lower > 0 and bb_middle > 0:
+                # Calculate Bollinger Band width for squeeze detection
+                bb_width = (bb_upper - bb_lower) / bb_middle * 100
+
+                # 1. Oversold Bounce Signal (Strong BUY)
+                if current_price <= bb_lower * 1.02 and rsi < 35:  # Price at/near lower band + oversold RSI
+                    bb_buy_signals += 2
+                    bb_reasons.append(f"BB Oversold bounce: Price {current_price:.2f} near lower band ({bb_lower:.2f}) + RSI {rsi:.1f}")
+
+                # 2. Overbought Rejection Signal (Strong SELL)
+                elif current_price >= bb_upper * 0.98 and rsi > 65:  # Price at/near upper band + overbought RSI
+                    bb_sell_signals += 2
+                    bb_reasons.append(f"BB Overbought rejection: Price {current_price:.2f} near upper band ({bb_upper:.2f}) + RSI {rsi:.1f}")
+
+                # 3. Additional oversold/overbought without strict band proximity
+                elif rsi <= 25:  # Very oversold
+                    bb_buy_signals += 1.5
+                    bb_reasons.append(f"BB Very oversold: RSI {rsi:.1f} <= 25")
+
+                elif rsi >= 75:  # Very overbought
+                    bb_sell_signals += 1.5
+                    bb_reasons.append(f"BB Very overbought: RSI {rsi:.1f} >= 75")
+
+                # 3. Squeeze Breakout (Moderate signals)
+                elif bb_width < 10:  # Tight bands indicate low volatility
+                    if current_price > bb_upper and buy_condition_1:  # Breakout above upper band in uptrend
+                        bb_buy_signals += 1
+                        bb_reasons.append(f"BB Squeeze breakout: Price {current_price:.2f} > Upper {bb_upper:.2f}")
+                    elif current_price < bb_lower and sell_condition_1:  # Breakdown below lower band in downtrend
+                        bb_sell_signals += 1
+                        bb_reasons.append(f"BB Squeeze breakdown: Price {current_price:.2f} < Lower {bb_lower:.2f}")
+
+                # 4. Mean Reversion Signals
+                elif current_price < bb_middle and buy_condition_2 and buy_condition_3:  # Price below middle, but other conditions bullish
+                    bb_buy_signals += 0.5
+                    bb_reasons.append(f"BB Mean reversion: Price {current_price:.2f} below middle {bb_middle:.2f}")
+                elif current_price > bb_middle and sell_condition_2 and sell_condition_3:  # Price above middle, but other conditions bearish
+                    bb_sell_signals += 0.5
+                    bb_reasons.append(f"BB Mean reversion: Price {current_price:.2f} above middle {bb_middle:.2f}")
+
+                # 5. Band Position Analysis
+                if bb_lower < current_price < bb_middle:
+                    bb_reasons.append(f"BB Position: Lower third (potential support)")
+                elif bb_middle < current_price < bb_upper:
+                    bb_reasons.append(f"BB Position: Upper third (potential resistance)")
+
+            # Check core conditions with flexible explanations
+            if buy_condition_1:
+                if current_price > ma50 > ma200:
+                    buy_conditions.append("Strong bullish trend: Price > MA50 > MA200")
+                else:
+                    buy_conditions.append("Sideways bullish: Price > MA50, MAs aligned")
+            if buy_condition_2:
+                buy_conditions.append(f"RSI momentum: RSI {rsi:.1f} > 40")
+            if buy_condition_3:
+                buy_conditions.append("Above MA20: Price above short-term MA")
+
+            if sell_condition_1:
+                if current_price < ma50 < ma200:
+                    sell_conditions.append("Strong bearish trend: Price < MA50 < MA200")
+                else:
+                    sell_conditions.append("Sideways bearish: Price < MA50, MAs aligned")
+            if sell_condition_2:
+                sell_conditions.append(f"RSI momentum: RSI {rsi:.1f} < 60")
+            if sell_condition_3:
+                sell_conditions.append("Below MA20: Price below short-term MA")
+
+            # Enhanced Signal Determination with Bollinger Bands
+            direction = "HOLD"
+            confidence = 0
+            sentiment = "NEUTRAL"
+
+            # Primary Signal: Core AND Logic
+            core_buy_signal = buy_condition_1 and buy_condition_2 and buy_condition_3
+            core_sell_signal = sell_condition_1 and sell_condition_2 and sell_condition_3
+
+            # Secondary Signal: Strong Bollinger Band signals can override
+            strong_bb_buy = bb_buy_signals >= 2  # Oversold bounce
+            strong_bb_sell = bb_sell_signals >= 2  # Overbought rejection
+
+            # Priority 1: Strong BB Signals (can override core logic)
+            if strong_bb_buy and sum([buy_condition_1, buy_condition_2, buy_condition_3]) >= 1:
+                # Strong BB oversold bounce with at least 1 core condition
+                direction = "BUY"
+                confidence = 2 + int(bb_buy_signals)  # 4-5 confidence
+                sentiment = "BULLISH" if bb_buy_signals >= 2 else "NEUTRAL"
+                reasons = ["🎯 BB Override: Strong oversold bounce"] + bb_reasons + buy_conditions
+
+            elif strong_bb_sell and sum([sell_condition_1, sell_condition_2, sell_condition_3]) >= 1:
+                # Strong BB overbought rejection with at least 1 core condition
+                direction = "SELL"
+                confidence = 2 + int(bb_sell_signals)  # 4-5 confidence
+                sentiment = "BEARISH" if bb_sell_signals >= 2 else "NEUTRAL"
+                reasons = ["🎯 BB Override: Strong overbought rejection"] + bb_reasons + sell_conditions
+
+            # Priority 2: Perfect Core Conditions
+            elif core_buy_signal:
+                # Perfect core BUY conditions met
+                direction = "BUY"
+                confidence = 3 + min(int(bb_buy_signals), 2)  # 3-5 confidence
+                sentiment = "BULLISH"
+                reasons = buy_conditions + bb_reasons[:2]
+
+            elif core_sell_signal:
+                # Perfect core SELL conditions met
+                direction = "SELL"
+                confidence = 3 + min(int(bb_sell_signals), 2)  # 3-5 confidence
+                sentiment = "BEARISH"
+                reasons = sell_conditions + bb_reasons[:2]
+
+            # Priority 3: Moderate BB signals with partial core conditions
+            elif bb_buy_signals >= 1 and sum([buy_condition_1, buy_condition_2, buy_condition_3]) >= 2:
+                # Moderate BB buy signal with 2/3 core conditions
+                direction = "BUY"
+                confidence = 2 + int(bb_buy_signals)  # 3-4 confidence
+                sentiment = "NEUTRAL"
+                reasons = ["🔄 BB Enhanced: " + bb_reasons[0]] + buy_conditions if bb_reasons else buy_conditions
+
+            elif bb_sell_signals >= 1 and sum([sell_condition_1, sell_condition_2, sell_condition_3]) >= 2:
+                # Moderate BB sell signal with 2/3 core conditions
+                direction = "SELL"
+                confidence = 2 + int(bb_sell_signals)  # 3-4 confidence
+                sentiment = "NEUTRAL"
+                reasons = ["🔄 BB Enhanced: " + bb_reasons[0]] + sell_conditions if bb_reasons else sell_conditions
+
+            # Priority 4: High-confidence partial signals (2/3 conditions with good RSI)
+            elif sum([buy_condition_1, buy_condition_2, buy_condition_3]) == 2 and rsi > 50:
+                direction = "BUY"
+                confidence = 2
+                sentiment = "NEUTRAL"
+                reasons = ["⚠️ Partial BUY: 2/3 conditions + bullish RSI"] + buy_conditions
+
+            elif sum([sell_condition_1, sell_condition_2, sell_condition_3]) == 2 and rsi < 50:
+                direction = "SELL"
+                confidence = 2
+                sentiment = "NEUTRAL"
+                reasons = ["⚠️ Partial SELL: 2/3 conditions + bearish RSI"] + sell_conditions
+
+            else:
+                # HOLD: Core conditions not met and no strong BB signals
+                confidence = 0
+                partial_buy = sum([buy_condition_1, buy_condition_2, buy_condition_3])
+                partial_sell = sum([sell_condition_1, sell_condition_2, sell_condition_3])
+
+                reasons = [f"Mixed signals: {partial_buy}/3 BUY, {partial_sell}/3 SELL conditions"]
+                if bb_reasons:
+                    reasons.extend(bb_reasons[:1])  # Add one BB context
+
+            # Enhanced Price Calculation with Bollinger Bands
+            entry_price = current_price
+
+            if direction == "BUY":
+                # BUY Stop Loss: Use BB Lower as dynamic support when available
+                if bb_lower > 0:
+                    bb_sl = bb_lower * 0.98  # 2% below lower band for buffer
+                    ma_sl = ma20 * 0.97  # 3% below MA20
+                    sl = round(max(bb_sl, ma_sl, current_price * 0.96), 2)  # Take the highest (closest) stop
+                else:
+                    sl = round(min(ma20 * 0.97, current_price * 0.97), 2)
+
+                # BUY Target: Use BB Upper as dynamic resistance when available
+                if bb_upper > 0 and strong_bb_buy:
+                    # For strong BB signals, target the upper band
+                    target = round(min(bb_upper * 0.98, current_price * (1 + 0.02 * confidence)), 2)
+                else:
+                    # Standard percentage target
+                    target = round(current_price * (1 + 0.03 + 0.01 * confidence), 2)  # 3-8% target
+
+            elif direction == "SELL":
+                # SELL Stop Loss: Use BB Upper as dynamic resistance when available
+                if bb_upper > 0:
+                    bb_sl = bb_upper * 1.02  # 2% above upper band for buffer
+                    ma_sl = ma20 * 1.03  # 3% above MA20
+                    sl = round(min(bb_sl, ma_sl, current_price * 1.04), 2)  # Take the lowest (closest) stop
+                else:
+                    sl = round(max(ma20 * 1.03, current_price * 1.03), 2)
+
+                # SELL Target: Use BB Lower as dynamic support when available
+                if bb_lower > 0 and strong_bb_sell:
+                    # For strong BB signals, target the lower band
+                    target = round(max(bb_lower * 1.02, current_price * (1 - 0.02 * confidence)), 2)
+                else:
+                    # Standard percentage target
+                    target = round(current_price * (1 - 0.03 - 0.01 * confidence), 2)  # 3-8% target
+
+            else:
+                # HOLD signals: Conservative risk management
+                if bb_middle > 0:
+                    # Use BB middle as reference for neutral signals
+                    sl = round(current_price * 0.97, 2)
+                    target = round(bb_middle, 2) if abs(current_price - bb_middle) > current_price * 0.02 else round(current_price * 1.02, 2)
+                else:
+                    sl = round(current_price * 0.97, 2)
+                    target = round(current_price * 1.03, 2)
+
+            return {
+                "sentiment": sentiment,
+                "signal": {
+                    "direction": direction,
+                    "entry": round(entry_price, 2),
+                    "sl": sl,
+                    "target": target,
+                    "confidence": confidence,
+                    "reasons": reasons
+                },
+                "conditions": {
+                    "buy_met": [buy_condition_1, buy_condition_2, buy_condition_3],
+                    "sell_met": [sell_condition_1, sell_condition_2, sell_condition_3]
+                },
+                "bollinger": {
+                    "buy_signals": bb_buy_signals,
+                    "sell_signals": bb_sell_signals,
+                    "width_pct": round((bb_upper - bb_lower) / bb_middle * 100, 1) if bb_middle > 0 else 0,
+                    "position": "lower" if bb_lower > 0 and current_price < bb_middle else
+                               "upper" if bb_upper > 0 and current_price > bb_middle else "middle"
+                }
+            }
+
+        except Exception as e:
+            logger.error(f"Error calculating trading signal for {symbol}: {e}")
+            # Fallback to safe HOLD signal
+            return {
+                "sentiment": "NEUTRAL",
+                "signal": {
+                    "direction": "HOLD",
+                    "entry": round(current_price, 2),
+                    "sl": round(current_price * 0.97, 2),
+                    "target": round(current_price * 1.03, 2),
+                    "confidence": 0,
+                    "reasons": ["Error in signal calculation"]
+                },
+                "scores": {
+                    "buy_score": 0.0,
+                    "sell_score": 0.0
+                }
+            }
 
 # Global service instance
 upstox_service = UpstoxService()
