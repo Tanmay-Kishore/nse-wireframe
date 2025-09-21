@@ -28,8 +28,8 @@ async def list_stocks(q: Optional[str] = None, min_gap: Optional[float] = None, 
             instruments = json.load(f)
         symbol_to_key = {inst['tradingsymbol'].upper(): inst['instrument_key'] for inst in instruments if 'tradingsymbol' in inst and 'instrument_key' in inst}
 
-        # Prepare list of symbols
-        symbols = get_watchlist_symbols()
+        # Prepare list of symbols in alphabetical order
+        symbols = sorted(get_watchlist_symbols())
         symbols_to_fetch = symbols[:limit]
 
         # Apply search filter if provided
@@ -49,7 +49,7 @@ async def list_stocks(q: Optional[str] = None, min_gap: Optional[float] = None, 
                         break
                 if symbol_match or name_match:
                     symbols_to_fetch.append(s)
-            symbols_to_fetch = symbols_to_fetch[:limit]
+            symbols_to_fetch = sorted(symbols_to_fetch)[:limit]
 
         # Get instrument keys for symbols
         instrument_keys = [symbol_to_key.get(s.upper()) for s in symbols_to_fetch if symbol_to_key.get(s.upper())]
