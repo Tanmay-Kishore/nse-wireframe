@@ -128,10 +128,19 @@ class SignalMonitorService:
             else:
                 emoji = "⚪"
 
+            # Get the main reason (first reason from the signal)
+            reasons = new_signal.get('reasons', [])
+            main_reason = reasons[0] if reasons else "No reason provided"
+
+            # Limit reason length for cleaner message
+            if len(main_reason) > 60:
+                main_reason = main_reason[:57] + "..."
+
             message_parts.append(
                 f"{emoji} **{symbol}**\n"
                 f"   Signal: {direction} (Confidence: {confidence})\n"
                 f"   Price: ₹{price}\n"
+                f"   Reason: {main_reason}\n"
                 f"   Change: {change['change_type']}\n"
             )
 
@@ -143,23 +152,88 @@ class SignalMonitorService:
         return "\n".join(message_parts)
 
     async def send_signal_notifications(self, changes: List[Dict]) -> bool:
-        """Send signal change notifications via Telegram"""
+        """Send signal change notifications via Telegram with interactive buttons"""
         if not changes:
             return True
 
         try:
-            message = self.format_notification_message(changes)
-            if message:
-                success = await send_alert(message)
-                if success:
-                    logger.info(f"Sent notification for {len(changes)} signal changes")
-                else:
-                    logger.warning("Failed to send Telegram notification")
-                return success
+            from services.telegram_bot import telegram_bot
+            from routers.settings import load_telegram_config
+
+            config = load_telegram_config()
+            if not config or not config.get("chat_id"):
+                logger.warning("No Telegram chat configured")
+                return False
+
+            chat_id = config["chat_id"]
+
+            # Send each change as a separate message with buttons (better UX)
+            for change in changes[:3]:  # Limit to 3 changes to avoid spam
+                message = self.format_single_change_message(change)
+                buttons = self._create_buttons_for_change(change)
+
+                success = await telegram_bot.send_message(chat_id, message, reply_markup=buttons)
+                if not success:
+                    logger.warning(f"Failed to send notification for {change['symbol']}")
+
+            if len(changes) > 3:
+                # Send summary message for remaining changes
+                summary_message = f"📊 **{len(changes) - 3} More Signal Changes**\n\nCheck your app for complete details."
+                await telegram_bot.send_message(chat_id, summary_message)
+
+            logger.info(f"Sent {min(len(changes), 3)} interactive notifications")
             return True
+
         except Exception as e:
             logger.error(f"Error sending notifications: {e}")
             return False
+
+    def format_single_change_message(self, change: Dict) -> str:
+        """Format a single signal change with detailed information"""
+        symbol = change['symbol']
+        new_signal = change['new_signal']
+        direction = new_signal['direction']
+        confidence = new_signal['confidence']
+        price = new_signal['price']
+        sentiment = new_signal['sentiment']
+
+        # Choose emoji based on signal
+        if direction == 'BUY':
+            emoji = "🟢"
+        elif direction == 'SELL':
+            emoji = "🔴"
+        else:
+            emoji = "⚪"
+
+        # Get the main reason
+        reasons = new_signal.get('reasons', [])
+        main_reason = reasons[0] if reasons else "No reason provided"
+        if len(main_reason) > 80:
+            main_reason = main_reason[:77] + "..."
+
+        message = f"""🚨 **Signal Change Alert**
+
+{emoji} **{symbol}** - {sentiment}
+📊 Signal: {direction} (Confidence: {confidence}/5)
+💰 Price: ₹{price}
+🔍 Reason: {main_reason}
+📈 Change: {change['change_type']}
+
+Choose your action:"""
+
+        return message
+
+    def _create_buttons_for_change(self, change: Dict):
+        """Create interactive buttons for a signal change"""
+        from services.telegram_bot import telegram_bot
+
+        symbol = change['symbol']
+        new_signal = change['new_signal']
+        direction = new_signal['direction']
+        price = new_signal['price']
+        confidence = new_signal['confidence']
+
+        return telegram_bot.create_trade_buttons(symbol, direction, price, confidence)
 
     async def check_and_notify(self) -> int:
         """Check for signal changes and send notifications"""

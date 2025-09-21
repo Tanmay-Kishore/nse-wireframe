@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug Journal</title>
+</head>
+<body>
+    <h1>Journal Debug Test</h1>
+    <div id="debug-output"></div>
+
+    <script>
+        async function debugJournal() {
+            try {
+                const response = await fetch('/api/journal');
+                const data = await response.json();
+
+                console.log('Raw API Response:', data);
+
+                let output = '<h2>Debug Results:</h2>';
+                output += `<p>Items received: ${data.items.length}</p>`;
+
+                if (data.items.length > 0) {
+                    const sample = data.items[0];
+                    output += '<h3>Sample Trade:</h3>';
+
+                    for (const [key, value] of Object.entries(sample)) {
+                        output += `<p><strong>${key}:</strong> ${value} (${typeof value})</p>`;
+                    }
+
+                    output += '<h3>Date Parsing Test:</h3>';
+                    const dateStr = sample.date;
+                    const parsedDate = new Date(dateStr);
+
+                    output += `<p>Raw date string: "${dateStr}"</p>`;
+                    output += `<p>Parsed Date object: ${parsedDate}</p>`;
+                    output += `<p>Is valid date: ${!isNaN(parsedDate.getTime())}</p>`;
+                    output += `<p>Formatted: ${parsedDate.toLocaleDateString()}</p>`;
+                }
+
+                document.getElementById('debug-output').innerHTML = output;
+
+            } catch (error) {
+                document.getElementById('debug-output').innerHTML = `<p style="color: red;">Error: ${error}</p>`;
+                console.error('Debug error:', error);
+            }
+        }
+
+        // Run debug on page load
+        debugJournal();
+    </script>
+</body>
+</html>
