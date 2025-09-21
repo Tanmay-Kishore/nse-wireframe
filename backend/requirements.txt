@@ -4,3 +4,6 @@ pydantic
 python-telegram-bot
 upstox-python-sdk
 requests
+numpy
+pandas
+nsetools
