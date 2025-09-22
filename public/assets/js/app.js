@@ -203,7 +203,10 @@ function renderOverview() {
       // Show top 8 gainers
       html += data.gainers.slice(0, 8).map(g => `<div class="wf-mover-card">
         <div class="wf-mover-header">
-          <span class="wf-mover-symbol">${g.symbol}</span>
+          <div class="wf-mover-title">
+            <span class="wf-mover-symbol">${g.symbol}</span>
+            ${g.company_name ? `<span class="wf-mover-company">${g.company_name}</span>` : ''}
+          </div>
           <span class="wf-mover-badge gainer">Gainer</span>
         </div>
         <div class="wf-mover-metrics">
@@ -225,7 +228,10 @@ function renderOverview() {
       // Show top 7 losers
       html += data.losers.slice(0, 7).map(l => `<div class="wf-mover-card">
         <div class="wf-mover-header">
-          <span class="wf-mover-symbol">${l.symbol}</span>
+          <div class="wf-mover-title">
+            <span class="wf-mover-symbol">${l.symbol}</span>
+            ${l.company_name ? `<span class="wf-mover-company">${l.company_name}</span>` : ''}
+          </div>
           <span class="wf-mover-badge loser">Loser</span>
         </div>
         <div class="wf-mover-metrics">
