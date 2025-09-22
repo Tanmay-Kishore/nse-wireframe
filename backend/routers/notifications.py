@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException, Query
 import logging
 from services.signal_monitor import get_signal_monitor, start_signal_monitoring, stop_signal_monitoring
 from services.stop_loss_monitor import get_stop_loss_monitor, start_stop_loss_monitoring, stop_stop_loss_monitoring
+# Real-time monitor temporarily unavailable
 from services.telegram_bot import send_alert
 
 logger = logging.getLogger(__name__)
@@ -14,6 +15,10 @@ router = APIRouter(prefix="/api/notifications", tags=["notifications"])
 
 signal_monitor = get_signal_monitor()
 stop_loss_monitor = get_stop_loss_monitor()
+
+# Real-time monitor not available after revert
+realtime_monitor = None
+realtime_available = False
 
 @router.get("/status")
 async def get_notification_status():
@@ -235,4 +240,81 @@ async def get_stop_loss_status():
 
     except Exception as e:
         logger.error(f"Error getting stop-loss status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/realtime/start")
+async def start_realtime_monitoring():
+    """Start real-time watchlist signal monitoring"""
+    try:
+        if not realtime_available:
+            return {
+                "success": False,
+                "message": "Real-time monitoring not available - service not found"
+            }
+
+        if realtime_monitor.monitoring:
+            return {
+                "success": True,
+                "message": "Real-time monitoring already active"
+            }
+
+        # Real-time monitoring not available
+        pass
+
+        return {
+            "success": True,
+            "message": "Real-time watchlist monitoring started successfully",
+            "type": "websocket_stream"
+        }
+
+    except Exception as e:
+        logger.error(f"Error starting real-time monitoring: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/realtime/stop")
+async def stop_realtime_monitoring():
+    """Stop real-time watchlist monitoring"""
+    try:
+        if not realtime_available:
+            return {
+                "success": False,
+                "message": "Real-time monitoring not available"
+            }
+
+        if not realtime_monitor.monitoring:
+            return {
+                "success": True,
+                "message": "Real-time monitoring was not active"
+            }
+
+        # Real-time monitoring not available
+        pass
+
+        return {
+            "success": True,
+            "message": "Real-time monitoring stopped"
+        }
+
+    except Exception as e:
+        logger.error(f"Error stopping real-time monitoring: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/realtime/status")
+async def get_realtime_monitoring_status():
+    """Get real-time monitoring status"""
+    try:
+        if not realtime_available:
+            return {
+                "realtime_available": False,
+                "message": "Real-time monitoring service not available"
+            }
+
+        status = realtime_monitor.get_monitoring_status()
+        return {
+            "realtime_status": status,
+            "message": "Real-time monitoring active" if status['realtime_monitoring'] else "Real-time monitoring inactive"
+        }
+
+    except Exception as e:
+        logger.error(f"Error getting real-time status: {e}")
         raise HTTPException(status_code=500, detail=str(e))

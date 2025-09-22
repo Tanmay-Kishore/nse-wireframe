@@ -158,6 +158,8 @@ a{color:var(--text);text-decoration:none}
 .wf-table-wrap{overflow:auto}
 .wf-table{width:100%;border-collapse:collapse}
 .wf-table th, .wf-table td{border:1px dashed var(--outline);padding:8px;text-align:left}
+.wf-table .profit{color:var(--buy);font-weight:500}
+.wf-table .loss{color:var(--sell);font-weight:500}
 .wf-footer{border-top:1px dashed var(--outline);background:var(--panel);margin-top:24px}
 
 /* Modal Styles - Enhanced */

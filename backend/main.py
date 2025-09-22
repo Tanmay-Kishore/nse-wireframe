@@ -19,7 +19,7 @@ except ImportError:
 
 app = FastAPI(title="NSE Monitor Wireframe")
 
-# Auto-start Telegram bot if configured
+# Auto-start services if configured
 @app.on_event("startup")
 async def startup_event():
     try:
@@ -27,6 +27,27 @@ async def startup_event():
         await start_telegram_bot_if_configured()
     except Exception as e:
         print(f"Warning: Could not auto-start Telegram bot: {e}")
+
+    try:
+        from services.stop_loss_monitor import start_stop_loss_monitoring
+        from services.upstox_service import get_upstox_service
+
+        upstox = get_upstox_service()
+        if upstox.is_configured():
+            await start_stop_loss_monitoring(interval_minutes=2)
+            print("✅ Stop-loss monitoring auto-started")
+        else:
+            print("⚠️ Stop-loss monitoring not started: Upstox not configured")
+    except Exception as e:
+        print(f"Warning: Could not auto-start stop-loss monitoring: {e}")
+
+    # Real-time monitoring using periodic checks instead
+    try:
+        from services.signal_monitor import start_signal_monitoring
+        await start_signal_monitoring(interval_minutes=2)
+        print("✅ Signal monitoring auto-started (2-minute intervals)")
+    except Exception as e:
+        print(f"Warning: Could not auto-start signal monitoring: {e}")
 
 # CORS (adjust as needed)
 app.add_middleware(

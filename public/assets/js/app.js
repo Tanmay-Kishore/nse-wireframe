@@ -743,16 +743,28 @@ function renderAlerts() {
 function renderJournal() {
   const tbody = document.querySelector("#journal-table tbody");
   getJSON("/journal").then(data => {
-    tbody.innerHTML = data.items.map(r => `<tr>
-      <td>${new Date(r.date).toLocaleDateString()}</td>
-      <td>${r.symbol}</td>
-      <td>${r.direction}</td>
-      <td>${r.entry}</td>
-      <td>${r.sl}</td>
-      <td>${r.target}</td>
-      <td>${r.exit ?? "-"}</td>
-      <td>${r.pnl}</td>
-    </tr>`).join("");
+    tbody.innerHTML = data.items.map(r => {
+      // Format current price with status color
+      const currentPrice = r.current_price || 0;
+      const currentPnL = r.current_pnl || 0;
+
+      // Use the correct P&L value - current_pnl for open trades, pnl for closed trades
+      const displayPnL = r.status === 'OPEN' ? currentPnL : (r.pnl || 0);
+      const statusClass = displayPnL > 0 ? 'profit' : displayPnL < 0 ? 'loss' : '';
+
+      return `<tr>
+        <td>${new Date(r.date).toLocaleDateString()}</td>
+        <td>${r.symbol}</td>
+        <td>${r.direction}</td>
+        <td>${r.quantity || 1}</td>
+        <td>₹${r.entry}</td>
+        <td class="${statusClass}">₹${currentPrice.toFixed(2)}</td>
+        <td>₹${r.sl}</td>
+        <td>₹${r.target}</td>
+        <td>${r.exit ? '₹' + r.exit : "-"}</td>
+        <td class="${statusClass}">${displayPnL > 0 ? '+' : ''}₹${displayPnL.toFixed(2)}</td>
+      </tr>`;
+    }).join("");
   });
 }
 
