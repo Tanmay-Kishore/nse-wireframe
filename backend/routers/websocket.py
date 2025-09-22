@@ -66,20 +66,20 @@ async def ws_screener(websocket: WebSocket):
                 # Format using the existing formatter
                 formatted_stock_data = upstox_service.format_stock_data(symbol, quote_data)
                 
-                # Check for Bollinger Band alerts
-                if formatted_stock_data.get("bb_upper") and formatted_stock_data.get("bb_lower"):
-                    alert_message = await alert_service.check_bollinger_band_crosses(
-                        symbol,
-                        formatted_stock_data["price"],
-                        formatted_stock_data["bb_upper"],
-                        formatted_stock_data["bb_lower"]
-                    )
-                    
-                    if alert_message:
-                        # Send Telegram alert
-                        alert_sent = await alert_service.send_telegram_alert(alert_message)
-                        if alert_sent:
-                            print(f"Bollinger Band alert sent for {symbol}")
+                # Bollinger Band alerts disabled - only BUY/SELL signals in Telegram
+                # if formatted_stock_data.get("bb_upper") and formatted_stock_data.get("bb_lower"):
+                #     alert_message = await alert_service.check_bollinger_band_crosses(
+                #         symbol,
+                #         formatted_stock_data["price"],
+                #         formatted_stock_data["bb_upper"],
+                #         formatted_stock_data["bb_lower"]
+                #     )
+                #
+                #     if alert_message:
+                #         # Send Telegram alert
+                #         alert_sent = await alert_service.send_telegram_alert(alert_message)
+                #         if alert_sent:
+                #             print(f"Bollinger Band alert sent for {symbol}")
                 
                 # Send formatted data to frontend
                 response = {

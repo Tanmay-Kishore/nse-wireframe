@@ -318,3 +318,98 @@ async def get_realtime_monitoring_status():
     except Exception as e:
         logger.error(f"Error getting real-time status: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/test-signal")
+async def send_test_signal_notification(signal_type: str = "BUY", symbol: str = "TCS", price: float = 3200.0, confidence: int = 4):
+    """Send a test signal notification with interactive buttons"""
+    try:
+        from services.telegram_bot import telegram_bot
+        from routers.settings import load_telegram_config
+        from datetime import datetime
+
+        config = load_telegram_config()
+        if not config or not config.get("chat_id"):
+            return {
+                "success": False,
+                "message": "Telegram not configured - no chat ID"
+            }
+
+        chat_id = config["chat_id"]
+
+        # Create sample signal data
+        sample_signal = {
+            'symbol': symbol.upper(),
+            'new_signal': {
+                'direction': signal_type.upper(),
+                'confidence': confidence,
+                'price': price,
+                'sentiment': 'BULLISH' if signal_type.upper() == 'BUY' else 'BEARISH',
+                'entry': price,
+                'sl': price * 0.97 if signal_type.upper() == 'BUY' else price * 1.03,
+                'target': price * 1.06 if signal_type.upper() == 'BUY' else price * 0.94,
+                'reasons': [
+                    f"Strong {signal_type.lower()}ish trend: Price > MA50 > MA200" if signal_type.upper() == 'BUY' else f"Strong {signal_type.lower()}ish trend: Price < MA50 < MA200",
+                    f"RSI momentum: RSI 65.0 > 40" if signal_type.upper() == 'BUY' else f"RSI momentum: RSI 35.0 < 60",
+                    f"Above MA20: Price above short-term MA" if signal_type.upper() == 'BUY' else f"Below MA20: Price below short-term MA"
+                ]
+            },
+            'change_type': f"Test Signal: HOLD → {signal_type.upper()}"
+        }
+
+        # Format the message
+        message = f"""🚨 **TEST SIGNAL NOTIFICATION**
+
+{'🟢' if signal_type.upper() == 'BUY' else '🔴'} **{symbol.upper()}** - {sample_signal['new_signal']['sentiment']}
+📊 **Signal**: {signal_type.upper()} {'⭐' * confidence}{'☆' * (5 - confidence)} ({confidence}/5)
+💰 **Current Price**: ₹{price:,.2f}
+
+🎯 **Trading Levels**:
+   📈 Entry: ₹{sample_signal['new_signal']['entry']:,.2f}
+   🛑 Stop Loss: ₹{sample_signal['new_signal']['sl']:,.2f}
+   🎯 Target: ₹{sample_signal['new_signal']['target']:,.2f}
+
+🔍 **Analysis**:
+• {sample_signal['new_signal']['reasons'][0]}
+• {sample_signal['new_signal']['reasons'][1]}
+• {sample_signal['new_signal']['reasons'][2]}
+
+📈 **Change**: {sample_signal['change_type']}
+
+⏰ **Test Notification** - {datetime.now().strftime('%H:%M:%S')}
+
+Choose your action:"""
+
+        # Create interactive buttons
+        buttons = telegram_bot.create_trade_buttons(
+            symbol.upper(),
+            signal_type.upper(),
+            price,
+            confidence
+        )
+
+        # Send the test notification
+        success = await telegram_bot.send_message(chat_id, message, reply_markup=buttons)
+
+        if success:
+            return {
+                "success": True,
+                "message": f"Test {signal_type.upper()} signal sent for {symbol.upper()}",
+                "signal_details": {
+                    "symbol": symbol.upper(),
+                    "signal": signal_type.upper(),
+                    "price": price,
+                    "confidence": confidence,
+                    "entry": sample_signal['new_signal']['entry'],
+                    "sl": sample_signal['new_signal']['sl'],
+                    "target": sample_signal['new_signal']['target']
+                }
+            }
+        else:
+            return {
+                "success": False,
+                "message": "Failed to send test notification"
+            }
+
+    except Exception as e:
+        logger.error(f"Error sending test signal: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

@@ -79,7 +79,7 @@ class TradeJournalService:
                 'symbol': symbol,
                 'action': action,
                 'entry_price': price,
-                'quantity': 1,  # Default quantity
+                'quantity': trade_data.get('quantity', 1),  # Use actual quantity from trade_data
                 'sl': sl,
                 'target': target,
                 'confidence': confidence,
