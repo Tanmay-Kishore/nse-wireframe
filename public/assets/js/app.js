@@ -904,6 +904,7 @@ function setupUpstoxModal() {
   const saveBtn = document.getElementById("save-upstox");
   const disconnectBtn = document.getElementById("disconnect-upstox");
   const testBtn = document.getElementById("test-upstox");
+  const oauthBtn = document.getElementById("connect-upstox-oauth");
 
   if (!modal || !configBtn) {
     return;
@@ -919,19 +920,19 @@ function setupUpstoxModal() {
     e.preventDefault();
     e.stopPropagation();
     e.stopImmediatePropagation();
-    
+
     // Set a flag to prevent immediate closing
     window.modalJustOpened = true;
-    
+
     // Show modal with proper CSS classes
     modal.style.display = "flex";
     modal.classList.add("show");
-    
+
     // Clear the flag after a short delay
     setTimeout(() => {
       window.modalJustOpened = false;
     }, 500);
-    
+
     // Show buttons if Upstox is connected
     if (disconnectBtn) {
       disconnectBtn.style.display = "inline-block";
@@ -939,7 +940,7 @@ function setupUpstoxModal() {
     if (testBtn) {
       testBtn.style.display = "inline-block";
     }
-    
+
     // Check if already configured
     try {
       const settings = await getJSON("/settings");
@@ -961,23 +962,27 @@ function setupUpstoxModal() {
     if (window.modalJustOpened) {
       return;
     }
-    
+
     if (modal) {
       modal.classList.remove("show");
       setTimeout(() => {
         modal.style.display = "none";
       }, 300);
     }
-    
+
     // Clear form
     const accessToken = document.getElementById("access-token");
     const apiKey = document.getElementById("api-key");
     const apiSecret = document.getElementById("api-secret");
-    
+    const oauthApiKey = document.getElementById("oauth-api-key");
+    const oauthApiSecret = document.getElementById("oauth-api-secret");
+
     if (accessToken) accessToken.value = "";
     if (apiKey) apiKey.value = "";
     if (apiSecret) apiSecret.value = "";
-    
+    if (oauthApiKey) oauthApiKey.value = "";
+    if (oauthApiSecret) oauthApiSecret.value = "";
+
     if (disconnectBtn) {
       disconnectBtn.style.display = "none";
     }
@@ -987,27 +992,84 @@ function setupUpstoxModal() {
   if (closeBtn) {
     closeBtn.addEventListener("click", closeModal);
   }
-  
+
   if (cancelBtn) {
     cancelBtn.addEventListener("click", closeModal);
   }
 
-  // Save configuration
+  // OAuth Connect button
+  if (oauthBtn) {
+    oauthBtn.addEventListener("click", async () => {
+      const oauthApiKeyEl = document.getElementById("oauth-api-key");
+      const oauthApiSecretEl = document.getElementById("oauth-api-secret");
+
+      if (!oauthApiKeyEl || !oauthApiSecretEl) {
+        alert("Form elements not found!");
+        return;
+      }
+
+      const apiKey = oauthApiKeyEl.value.trim();
+      const apiSecret = oauthApiSecretEl.value.trim();
+
+      if (!apiKey || !apiSecret) {
+        alert("API Key and API Secret are required for OAuth!");
+        return;
+      }
+
+      try {
+        // Store credentials temporarily for OAuth flow
+        const tempResponse = await fetch("/api/settings/upstox/oauth/temp", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            api_key: apiKey,
+            api_secret: apiSecret,
+          }),
+        });
+
+        if (!tempResponse.ok) {
+          const error = await tempResponse.json();
+          alert(`Error storing credentials: ${error.detail}`);
+          return;
+        }
+
+        // Initiate OAuth flow
+        const response = await fetch("/api/settings/upstox/oauth/initiate", {
+          method: "POST",
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          // Redirect to Upstox authorization URL
+          window.location.href = data.authorization_url;
+        } else {
+          const error = await response.json();
+          alert(`OAuth initiation failed: ${error.detail}`);
+        }
+      } catch (error) {
+        alert(`Network error: ${error.message}`);
+      }
+    });
+  }
+
+  // Save configuration (manual)
   if (saveBtn) {
     saveBtn.addEventListener("click", async () => {
       console.log("Save button clicked!");
-      
+
       const accessTokenEl = document.getElementById("access-token");
       const apiKeyEl = document.getElementById("api-key");
       const apiSecretEl = document.getElementById("api-secret");
-      
+
       if (!accessTokenEl) {
         alert("Form elements not found!");
         return;
       }
-      
+
       const accessToken = accessTokenEl.value.trim();
-      
+
       if (!accessToken) {
         alert("Access token is required!");
         return;

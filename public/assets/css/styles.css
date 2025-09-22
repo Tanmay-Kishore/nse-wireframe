@@ -322,11 +322,189 @@ a{color:var(--text);text-decoration:none}
   border:1px solid var(--outline);
 }
 
-/* skeletons */
-.wf-skel{background:repeating-linear-gradient(90deg, rgba(255,255,255,0.05), rgba(255,255,255,0.05) 10px, rgba(255,255,255,0.02) 10px, rgba(255,255,255,0.02) 20px);border:1px dashed var(--outline);border-radius:8px;min-height:40px;display:flex;align-items:center;justify-content:center;color:var(--muted)}
-@media (max-width: 900px){
-  .wf-grid-3{grid-template-columns:1fr}
-  .wf-col-8,.wf-col-6,.wf-col-4{flex:1 1 100%}
-  .wf-modal-content{width:95%;margin:10px}
-  .wf-modal-actions{flex-direction:column}
+/* Modal styles */
+.wf-modal {
+  display: none;
+  position: fixed;
+  z-index: 1000;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+}
+
+.wf-modal.show {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.wf-modal-content {
+  background: var(--panel);
+  border: 1px solid var(--outline);
+  border-radius: 16px;
+  width: 90%;
+  max-width: 500px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+  animation: modalSlideIn 0.3s ease-out;
+}
+
+@keyframes modalSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.wf-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid var(--outline);
+}
+
+.wf-modal-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.wf-modal-close {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 24px;
+  cursor: pointer;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.wf-modal-close:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+}
+
+.wf-modal-body {
+  padding: 20px 24px;
+}
+
+.wf-form-section {
+  margin-bottom: 24px;
+}
+
+.wf-form-section h4 {
+  margin: 0 0 12px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.wf-form-section .wf-help {
+  margin-bottom: 16px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.wf-divider {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  margin: 24px 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.wf-divider::before,
+.wf-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--outline);
+}
+
+.wf-divider span {
+  padding: 0 12px;
+  background: var(--panel);
+}
+
+.wf-modal-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 20px;
+  flex-wrap: wrap;
+}
+
+.wf-btn {
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid var(--outline);
+  background: transparent;
+  color: var(--text);
+  transition: all 0.2s ease;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.wf-btn.primary {
+  background: var(--buy);
+  border-color: var(--buy);
+  color: white;
+}
+
+.wf-btn.primary:hover {
+  background: #059669;
+  border-color: #059669;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+}
+
+.wf-btn.save {
+  background: var(--buy);
+  border-color: var(--buy);
+  color: white;
+}
+
+.wf-btn.save:hover {
+  background: #059669;
+  border-color: #059669;
+}
+
+.wf-btn.disconnect {
+  background: var(--sell);
+  border-color: var(--sell);
+  color: white;
+}
+
+.wf-btn.disconnect:hover {
+  background: #dc2626;
+  border-color: #dc2626;
+}
+
+.wf-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
