@@ -60,7 +60,7 @@ a{color:var(--text);text-decoration:none}
 .wf-nav a.active, .wf-nav a:hover{border-color:var(--outline);background:rgba(255,255,255,0.03)}
 .wf-main{padding-top:18px}
 .wf-main {
-  padding-bottom: 68px;
+  padding-bottom: 40px;
 }
 .wf-row{display:flex;gap:16px;flex-wrap:wrap}
 .wf-col-8{flex:1 1 65%}
@@ -80,7 +80,7 @@ a{color:var(--text);text-decoration:none}
   box-shadow: 0 8px 30px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.08);
   transform: translateY(-2px);
 }
-.wf-card-head{font-weight:600;margin-bottom:16px;display:flex;align-items:center;gap:12px;justify-content:space-between;font-size:18px;border-bottom:1px dashed var(--outline);padding-bottom:12px}
+.wf-card-head{font-weight:600;margin-bottom:12px;display:flex;align-items:center;gap:12px;justify-content:space-between;font-size:16px;border-bottom:1px dashed var(--outline);padding-bottom:8px}
 .wf-grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
 .wf-grid-2{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
 .wf-stock-card{border:1px dashed var(--outline);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:10px;min-height:220px;max-width:100%;overflow:hidden}
@@ -158,6 +158,31 @@ a{color:var(--text);text-decoration:none}
 }
 .wf-metrics{display:grid;grid-template-columns:0.7fr 1.3fr;gap:4px;font-size:12px;color:var(--muted)}
 .wf-metrics-wide{grid-column:1/-1}
+
+/* Organized metrics layout for stock details */
+.wf-metrics-section {
+  margin-bottom: 16px;
+}
+
+.wf-metrics-section:last-child {
+  margin-bottom: 0;
+}
+
+.wf-metrics-group {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.wf-metrics-group:last-child {
+  margin-bottom: 0;
+}
+
+.wf-metrics-group.wf-metrics-wide {
+  grid-template-columns: 1fr;
+}
+
 .wf-kv{display:flex;justify-content:space-between;border:1px dashed var(--outline);border-radius:6px;padding:5px 8px;min-height:26px;align-items:center;word-wrap:break-word;overflow:hidden}
 .wf-kv.compact{font-size:11px;padding:3px 6px;min-height:22px}
 .wf-kv span:last-child{text-align:right;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -187,7 +212,7 @@ a{color:var(--text);text-decoration:none}
 .wf-btn.disconnect:hover {
   background: rgba(239,68,68,0.08);
 }
-.wf-keygrid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.wf-keygrid{display:flex;flex-direction:column;gap:16px}
 .wf-footer {
   position: fixed;
   left: 0;
@@ -221,6 +246,123 @@ a{color:var(--text);text-decoration:none}
 .wf-table .profit{color:var(--buy);font-weight:500}
 .wf-table .loss{color:var(--sell);font-weight:500}
 .wf-footer{border-top:1px dashed var(--outline);background:var(--panel);margin-top:24px}
+
+/* Stock Detail Page Styles */
+.wf-stock-detail-card {
+  background: linear-gradient(135deg, rgba(255,255,255,0.02) 0%, rgba(255,255,255,0.01) 100%);
+  border: 1px dashed var(--outline);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 350px;
+}
+
+.wf-stock-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.wf-stock-title-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.wf-stock-symbol-large {
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.wf-stock-name {
+  font-size: 18px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.wf-stock-price-large {
+  font-size: 28px;
+  font-weight: 600;
+  margin-top: 4px;
+}
+
+.wf-stock-change {
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.wf-stock-change.positive {
+  color: var(--buy);
+}
+
+.wf-stock-change.negative {
+  color: var(--sell);
+}
+
+.wf-stock-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.wf-stock-metrics-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.wf-metric-group {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.wf-metric-group.wf-metric-full {
+  grid-template-columns: 1fr;
+}
+
+.wf-metric-card {
+  background: linear-gradient(135deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%);
+  border: 1px dashed var(--outline);
+  border-radius: 8px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.wf-metric-label {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.wf-metric-value {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.wf-metric-value.buy-signal {
+  color: var(--buy);
+}
+
+.wf-metric-value.sell-signal {
+  color: var(--sell);
+}
+
+.wf-stock-note {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px dashed var(--outline);
+}
 
 /* Modal Styles - Enhanced */
 .wf-modal{
