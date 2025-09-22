@@ -15,11 +15,6 @@ UPSTOX_CONFIG_FILE = os.path.join(os.path.dirname(__file__), "..", "config", "up
 TELEGRAM_CONFIG_FILE = os.path.join(os.path.dirname(__file__), "..", "config", "telegram_config.json")
 THRESHOLDS_CONFIG_FILE = os.path.join(os.path.dirname(__file__), "..", "config", "thresholds_config.json")
 
-class UpstoxConfig(BaseModel):
-    access_token: str
-    api_key: str = ""
-    api_secret: str = ""
-
 class UpstoxOAuthCredentials(BaseModel):
     api_key: str
     api_secret: str
@@ -119,43 +114,10 @@ async def get_settings():
         "telegram_linked": telegram_connected, 
         "thresholds": {"gap": 2.0, "rsi": 70},
         "upstox_connected": upstox_connected,
-        "upstox_token_expiry": upstox_token_expiry
+        "upstox_token_expiry": upstox_token_expiry,
+        "upstox_api_key": upstox_config.get("api_key", "") if upstox_config else "",
+        "upstox_api_secret": upstox_config.get("api_secret", "") if upstox_config else ""
     }
-
-@router.post("/settings/upstox")
-async def configure_upstox(config: UpstoxConfig):
-    """Configure Upstox API settings"""
-    try:
-        # Calculate expiry date (Upstox tokens expire next day at 3:30 AM)
-        tomorrow = datetime.now() + timedelta(days=1)
-        expiry_time = tomorrow.replace(hour=3, minute=30, second=0, microsecond=0)  # 3:30 AM next day
-        
-        config_data = {
-            "access_token": config.access_token,
-            "api_key": config.api_key,
-            "api_secret": config.api_secret,
-            "created_at": datetime.now().isoformat(),
-            "expires_at": expiry_time.isoformat()
-        }
-        
-        if save_upstox_config(config_data):
-            # Refresh the Upstox service with new config
-            try:
-                from services.upstox_service import refresh_upstox_config
-                refresh_upstox_config()
-            except Exception as e:
-                print(f"Warning: Could not refresh Upstox service: {e}")
-            
-            return {
-                "success": True, 
-                "message": "Upstox configuration saved successfully",
-                "expires_at": expiry_time.isoformat()
-            }
-        else:
-            raise HTTPException(status_code=500, detail="Failed to save configuration")
-            
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Configuration error: {str(e)}")
 
 @router.post("/settings/upstox/test")
 async def test_upstox_connection():

@@ -901,7 +901,6 @@ function setupUpstoxModal() {
   const configBtn = document.getElementById("upstox-config");
   const closeBtn = document.getElementById("close-modal");
   const cancelBtn = document.getElementById("cancel-upstox");
-  const saveBtn = document.getElementById("save-upstox");
   const disconnectBtn = document.getElementById("disconnect-upstox");
   const testBtn = document.getElementById("test-upstox");
   const oauthBtn = document.getElementById("connect-upstox-oauth");
@@ -941,12 +940,23 @@ function setupUpstoxModal() {
       testBtn.style.display = "inline-block";
     }
 
-    // Check if already configured
+    // Check if already configured and pre-fill form fields
     try {
       const settings = await getJSON("/settings");
       if (!settings.upstox_connected) {
         if (disconnectBtn) disconnectBtn.style.display = "none";
         if (testBtn) testBtn.style.display = "none";
+      }
+      
+      // Pre-fill API credentials if they exist
+      const oauthApiKeyEl = document.getElementById("oauth-api-key");
+      const oauthApiSecretEl = document.getElementById("oauth-api-secret");
+      
+      if (oauthApiKeyEl && settings.upstox_api_key) {
+        oauthApiKeyEl.value = settings.upstox_api_key;
+      }
+      if (oauthApiSecretEl && settings.upstox_api_secret) {
+        oauthApiSecretEl.value = settings.upstox_api_secret;
       }
     } catch (error) {
       // Keep buttons visible on error
@@ -971,15 +981,9 @@ function setupUpstoxModal() {
     }
 
     // Clear form
-    const accessToken = document.getElementById("access-token");
-    const apiKey = document.getElementById("api-key");
-    const apiSecret = document.getElementById("api-secret");
     const oauthApiKey = document.getElementById("oauth-api-key");
     const oauthApiSecret = document.getElementById("oauth-api-secret");
 
-    if (accessToken) accessToken.value = "";
-    if (apiKey) apiKey.value = "";
-    if (apiSecret) apiSecret.value = "";
     if (oauthApiKey) oauthApiKey.value = "";
     if (oauthApiSecret) oauthApiSecret.value = "";
 
@@ -1049,58 +1053,6 @@ function setupUpstoxModal() {
           alert(`OAuth initiation failed: ${error.detail}`);
         }
       } catch (error) {
-        alert(`Network error: ${error.message}`);
-      }
-    });
-  }
-
-  // Save configuration (manual)
-  if (saveBtn) {
-    saveBtn.addEventListener("click", async () => {
-      console.log("Save button clicked!");
-
-      const accessTokenEl = document.getElementById("access-token");
-      const apiKeyEl = document.getElementById("api-key");
-      const apiSecretEl = document.getElementById("api-secret");
-
-      if (!accessTokenEl) {
-        alert("Form elements not found!");
-        return;
-      }
-
-      const accessToken = accessTokenEl.value.trim();
-
-      if (!accessToken) {
-        alert("Access token is required!");
-        return;
-      }
-
-      try {
-        console.log("Sending configuration...");
-        const response = await fetch("/api/settings/upstox", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            access_token: accessToken,
-            api_key: apiKeyEl ? apiKeyEl.value.trim() : "",
-            api_secret: apiSecretEl ? apiSecretEl.value.trim() : "",
-          }),
-        });
-
-        const result = await response.json();
-        console.log("Response:", result);
-
-        if (response.ok) {
-          alert("Upstox configuration saved successfully!");
-          closeModal();
-          loadSettingsData(); // Refresh status
-        } else {
-          alert(`Error: ${result.detail}`);
-        }
-      } catch (error) {
-        console.error("Network error:", error);
         alert(`Network error: ${error.message}`);
       }
     });

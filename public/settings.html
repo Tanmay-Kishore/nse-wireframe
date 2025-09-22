@@ -54,8 +54,8 @@
           <div class="wf-modal-body">
             <!-- OAuth Section -->
             <div id="upstox-oauth-section" class="wf-form-section">
-              <h4>Quick Connect (Recommended)</h4>
-              <p class="wf-help">Connect using OAuth - no manual token management required.</p>
+              <h4>Connect to Upstox</h4>
+              <p class="wf-help">Enter your API credentials to connect using OAuth.</p>
               <div class="wf-form-group">
                 <label for="oauth-api-key">API Key *</label>
                 <input id="oauth-api-key" class="wf-input" type="text" placeholder="Your Upstox API Key" />
@@ -68,34 +68,6 @@
               </div>
               <div class="wf-modal-actions">
                 <button id="connect-upstox-oauth" class="wf-btn primary">Connect to Upstox</button>
-              </div>
-            </div>
-
-            <div class="wf-divider">
-              <span>OR</span>
-            </div>
-
-            <!-- Manual Token Section -->
-            <div id="upstox-manual-section" class="wf-form-section">
-              <h4>Manual Configuration</h4>
-              <p class="wf-help">Enter access token manually (expires daily).</p>
-              <div class="wf-form-group">
-                <label for="access-token">Access Token *</label>
-                <textarea id="access-token" class="wf-input" placeholder="Enter your Upstox access token here..." rows="3"></textarea>
-                <div class="wf-help">Token expires daily at market close. Get new token from Upstox API console.</div>
-              </div>
-              <div class="wf-form-group">
-                <label for="api-key">API Key (Optional)</label>
-                <input id="api-key" class="wf-input" type="text" placeholder="Your Upstox API Key" />
-                <div class="wf-help">Required for some advanced features.</div>
-              </div>
-              <div class="wf-form-group">
-                <label for="api-secret">API Secret (Optional)</label>
-                <input id="api-secret" class="wf-input" type="password" placeholder="Your Upstox API Secret" />
-                <div class="wf-help">Keep this secure. Used for order placement.</div>
-              </div>
-              <div class="wf-modal-actions">
-                <button id="save-upstox" class="wf-btn save">Save Configuration</button>
                 <button id="test-upstox" class="wf-btn" style="display: none;">Test Connection</button>
                 <button id="disconnect-upstox" class="wf-btn disconnect" style="display: none;">Disconnect</button>
                 <button id="cancel-upstox" class="wf-btn">Cancel</button>
