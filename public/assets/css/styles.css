@@ -156,6 +156,15 @@ a{color:var(--text);text-decoration:none}
   color: var(--sell) !important;
 }
 
+/* General signal color classes */
+.buy-signal {
+  color: var(--buy) !important;
+}
+
+.sell-signal {
+  color: var(--sell) !important;
+}
+
 /* Position remove button at top right */
 .wf-pill-btn.remove.top-right {
   position: absolute;

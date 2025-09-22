@@ -675,7 +675,7 @@ function renderStockDetail() {
         <div class="wf-stock-title-section">
           <div class="wf-stock-symbol-large ${s.signal?.direction === "BUY" ? "buy-signal" : s.signal?.direction === "SELL" ? "sell-signal" : ""}">${s.symbol}</div>
           ${s.name ? `<div class="wf-stock-name ${s.signal?.direction === "BUY" ? "buy-signal" : s.signal?.direction === "SELL" ? "sell-signal" : ""}">${s.name}</div>` : ''}
-          <div class="wf-stock-price-large">₹${formatNumber(s.price, 2)}</div>
+          <div class="wf-stock-price-large ${s.sentiment === 'BULLISH' ? 'buy-signal' : s.sentiment === 'BEARISH' ? 'sell-signal' : ''}">₹${formatNumber(s.price, 2)}</div>
           <div class="wf-stock-change ${s.gap > 0 ? 'positive' : s.gap < 0 ? 'negative' : ''}">${formatNumber(s.gap, 2)}%</div>
         </div>
         <div class="wf-stock-actions">
