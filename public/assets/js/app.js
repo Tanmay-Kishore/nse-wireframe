@@ -163,43 +163,64 @@ function renderScreener() {
     });
   }
 
+  // Global WebSocket references for cleanup
+  let screenerWebSocket = null;
+  let stockDetailWebSocket = null;
+
   function setupScreenerWebSocket() {
+    // Close existing WebSocket if any
+    if (screenerWebSocket) {
+      screenerWebSocket.close();
+      screenerWebSocket = null;
+    }
+
     const badge = document.getElementById("screener-realtime-badge");
-    const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws/screener`);
-    
-    ws.onopen = () => {
+    screenerWebSocket = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws/screener`);
+
+    screenerWebSocket.onopen = () => {
       console.log("Screener WebSocket connected");
       if (badge) badge.textContent = "RT: live";
     };
-    
-    ws.onmessage = (ev) => {
+
+    screenerWebSocket.onmessage = (ev) => {
       const data = JSON.parse(ev.data);
       if (data.type === "stock_update" && data.symbol && data.data) {
         // Update stored data
         stocksData[data.symbol] = data.data;
-        
+
         // Find the stock card element and update it
         updateStockCard(data.symbol, data.data);
       }
     };
-    
-    ws.onclose = () => {
+
+    screenerWebSocket.onclose = () => {
       console.log("Screener WebSocket disconnected");
       if (badge) badge.textContent = "RT: disconnected";
-      
-      // Attempt to reconnect after 3 seconds
+
+      // Only attempt to reconnect if still on screener page
       setTimeout(() => {
-        if (document.documentElement.getAttribute("data-page") === "screener") {
+        if (document.documentElement.getAttribute("data-page") === "screener" && screenerWebSocket && screenerWebSocket.readyState === WebSocket.CLOSED) {
           if (badge) badge.textContent = "RT: reconnecting";
           setupScreenerWebSocket();
         }
       }, 3000);
     };
-    
-    ws.onerror = (error) => {
+
+    screenerWebSocket.onerror = (error) => {
       console.error("Screener WebSocket error:", error);
       if (badge) badge.textContent = "RT: error";
     };
+  }
+
+  function cleanupScreenerWebSocket() {
+    if (screenerWebSocket) {
+      console.log("Cleaning up screener WebSocket");
+      screenerWebSocket.close();
+      screenerWebSocket = null;
+
+      const badge = document.getElementById("screener-realtime-badge");
+      if (badge) badge.textContent = "RT: disconnected";
+    }
   }
 
   function updateStockCard(symbol, stockData) {
@@ -697,40 +718,80 @@ function renderStock() {
     }
   });
 
-// WebSocket for real-time price updates
-const badge = document.getElementById("realtime-badge");
-const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws/price?symbol=${encodeURIComponent(symbol)}`);
-ws.onopen = () => { badge.textContent = "RT: live"; };
-ws.onmessage = (ev) => {
-  const data = JSON.parse(ev.data);
-  if (data.price !== undefined) {
-    const el = document.getElementById("rt-price");
-    if (el) el.textContent = Number(data.price).toFixed(2);
+  // WebSocket setup for stock detail page
+  function setupStockWebSocket() {
+    // Close existing WebSocket if any
+    if (stockDetailWebSocket) {
+      stockDetailWebSocket.close();
+      stockDetailWebSocket = null;
+    }
+
+    const badge = document.getElementById("realtime-badge");
+    if (!badge) return; // No badge element, not on stock page
+
+    stockDetailWebSocket = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws/price?symbol=${encodeURIComponent(symbol)}`);
+
+    stockDetailWebSocket.onopen = () => {
+      badge.textContent = "RT: live";
+      console.log("Stock detail WebSocket connected for", symbol);
+    };
+
+    stockDetailWebSocket.onmessage = (ev) => {
+      const data = JSON.parse(ev.data);
+      if (data.price !== undefined) {
+        const el = document.getElementById("rt-price");
+        if (el) el.textContent = Number(data.price).toFixed(2);
+      }
+      if (data.tick) {
+        if (data.tick.gap !== undefined) {
+          const gapEl = document.getElementById("rt-gap");
+          if (gapEl) gapEl.textContent = Number(data.tick.gap).toFixed(2) + "%";
+        }
+        if (data.tick.volume !== undefined) {
+          const volEl = document.getElementById("rt-volume");
+          if (volEl) volEl.textContent = data.tick.volume;
+        }
+        if (data.tick.vwap !== undefined) {
+          const vwapEl = document.getElementById("rt-vwap");
+          if (vwapEl) vwapEl.textContent = Number(data.tick.vwap).toFixed(2);
+        }
+        if (data.tick.rsi !== undefined) {
+          const rsiEl = document.getElementById("rt-rsi");
+          if (rsiEl) rsiEl.textContent = Number(data.tick.rsi).toFixed(1);
+        }
+        if (data.tick.ma20 !== undefined && data.tick.ma50 !== undefined && data.tick.ma200 !== undefined) {
+          const maEl = document.getElementById("rt-ma");
+          if (maEl) maEl.textContent = `${Number(data.tick.ma20).toFixed(2)} / ${Number(data.tick.ma50).toFixed(2)} / ${Number(data.tick.ma200).toFixed(2)}`;
+        }
+      }
+    };
+
+    stockDetailWebSocket.onclose = () => {
+      badge.textContent = "RT: disconnected";
+      console.log("Stock detail WebSocket disconnected");
+    };
+
+    stockDetailWebSocket.onerror = (error) => {
+      console.error("Stock detail WebSocket error:", error);
+      badge.textContent = "RT: error";
+    };
   }
-  if (data.tick) {
-    if (data.tick.gap !== undefined) {
-      const gapEl = document.getElementById("rt-gap");
-      if (gapEl) gapEl.textContent = Number(data.tick.gap).toFixed(2) + "%";
-    }
-    if (data.tick.volume !== undefined) {
-      const volEl = document.getElementById("rt-volume");
-      if (volEl) volEl.textContent = data.tick.volume;
-    }
-    if (data.tick.vwap !== undefined) {
-      const vwapEl = document.getElementById("rt-vwap");
-      if (vwapEl) vwapEl.textContent = Number(data.tick.vwap).toFixed(2);
-    }
-    if (data.tick.rsi !== undefined) {
-      const rsiEl = document.getElementById("rt-rsi");
-      if (rsiEl) rsiEl.textContent = Number(data.tick.rsi).toFixed(1);
-    }
-    if (data.tick.ma20 !== undefined && data.tick.ma50 !== undefined && data.tick.ma200 !== undefined) {
-      const maEl = document.getElementById("rt-ma");
-      if (maEl) maEl.textContent = `${Number(data.tick.ma20).toFixed(2)} / ${Number(data.tick.ma50).toFixed(2)} / ${Number(data.tick.ma200).toFixed(2)}`;
+
+  function cleanupStockWebSocket() {
+    if (stockDetailWebSocket) {
+      console.log("Cleaning up stock detail WebSocket");
+      stockDetailWebSocket.close();
+      stockDetailWebSocket = null;
+
+      const badge = document.getElementById("realtime-badge");
+      if (badge) badge.textContent = "RT: disconnected";
     }
   }
-};
-ws.onclose = () => { badge.textContent = "RT: disconnected"; };
+
+  // Initialize stock WebSocket if on stock page
+  if (document.getElementById("realtime-badge")) {
+    setupStockWebSocket();
+  }
 }
 
 function renderAlerts() {
@@ -1316,6 +1377,51 @@ window.addEventListener("load", () => {
     console.log("Settings page - config button found:", !!configBtn);
     if (!configBtn) {
       console.error("Configure button not found after window load!");
+    }
+  }
+});
+
+// WebSocket cleanup on page navigation/close
+window.addEventListener("beforeunload", () => {
+  console.log("Page unloading - cleaning up all WebSockets");
+  if (typeof cleanupScreenerWebSocket === 'function') {
+    cleanupScreenerWebSocket();
+  }
+  if (typeof cleanupStockWebSocket === 'function') {
+    cleanupStockWebSocket();
+  }
+});
+
+// Cleanup when navigating between pages (for SPAs or when links are clicked)
+document.addEventListener("click", (event) => {
+  const link = event.target.closest("a");
+  if (link && link.href && !link.href.includes(window.location.pathname)) {
+    // Navigating to a different page
+    console.log("Navigating away from current page - cleaning up WebSockets");
+    if (typeof cleanupScreenerWebSocket === 'function') {
+      cleanupScreenerWebSocket();
+    }
+    if (typeof cleanupStockWebSocket === 'function') {
+      cleanupStockWebSocket();
+    }
+  }
+});
+
+// Additional cleanup on page visibility change (when user switches tabs/apps)
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) {
+    // Page is now hidden
+    const currentPage = document.documentElement.getAttribute("data-page");
+    if (currentPage === "screener" && screenerWebSocket && screenerWebSocket.readyState === WebSocket.OPEN) {
+      console.log("Page hidden - keeping WebSocket open but noting state");
+      // Keep connection open for background updates, just log the state
+    }
+  } else {
+    // Page is now visible
+    const currentPage = document.documentElement.getAttribute("data-page");
+    if (currentPage === "screener" && (!screenerWebSocket || screenerWebSocket.readyState !== WebSocket.OPEN)) {
+      console.log("Page visible and screener WebSocket not connected - reconnecting");
+      setupScreenerWebSocket();
     }
   }
 });

@@ -95,8 +95,12 @@ class UpstoxService:
                 
                 # Reset retry count on successful connection
                 retry_count = 0
-                logger.info(f"Connecting to Upstox websocket with {len(instrument_keys)} instruments")
-                
+                # Limit instruments to prevent overwhelming Upstox
+                max_instruments = 15  # Reduce from 20 to 15 to prevent timeouts
+                limited_keys = instrument_keys[:max_instruments]
+
+                logger.info(f"Connecting to Upstox websocket with {len(limited_keys)} instruments (limited from {len(instrument_keys)})")
+
                 # Step 3: Connect to websocket
                 async with websockets.connect(ws_url, ssl=ssl_context, ping_interval=30, ping_timeout=10) as ws:
                     # Step 4: Send subscribe message (use 'instrumentKeys' camelCase)
@@ -105,20 +109,37 @@ class UpstoxService:
                         "method": "sub",
                         "data": {
                             "mode": "full",
-                            "instrumentKeys": instrument_keys
+                            "instrumentKeys": limited_keys
                         }
                     }
-                    await ws.send(json.dumps(subscribe_msg).encode('utf-8'))
-                    logger.info(f"Subscription sent for {len(instrument_keys)} instruments")
+
+                    # Send subscription with timeout to prevent hanging
+                    try:
+                        await asyncio.wait_for(
+                            ws.send(json.dumps(subscribe_msg).encode('utf-8')),
+                            timeout=10.0
+                        )
+                        logger.info(f"Subscription sent for {len(limited_keys)} instruments")
+                    except asyncio.TimeoutError:
+                        logger.error("Subscription timeout - Upstox may be overloaded")
+                        break
                     
-                    # Step 5: Receive and decode messages
+                    # Step 5: Receive and decode messages with timeout
                     while True:
                         # Check if market is still open
                         if not is_market_open():
                             logger.info("Market closed during websocket session. Stopping stream.")
                             break
-                            
-                        msg = await ws.recv()
+
+                        try:
+                            # Add timeout to prevent blocking indefinitely
+                            msg = await asyncio.wait_for(ws.recv(), timeout=30.0)
+                        except asyncio.TimeoutError:
+                            logger.warning("WebSocket message timeout - continuing...")
+                            continue
+                        except Exception as e:
+                            logger.error(f"WebSocket receive error: {e}")
+                            break
                         try:
                             # Try to decode as protobuf directly (Upstox v3)
                             feed_response = market_data_feed_pb2.FeedResponse()
