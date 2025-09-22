@@ -116,6 +116,46 @@ a{color:var(--text);text-decoration:none}
 .wf-pill-btn.remove:hover{
   background:rgba(239,68,68,0.1);
 }
+.wf-pill-btn.details{
+  color:var(--text);
+  border-color:var(--outline);
+}
+.wf-pill-btn.details:hover{
+  background:rgba(255,255,255,0.05);
+  border-color:rgba(255,255,255,0.3);
+}
+
+/* Signal colors for stock names */
+.wf-mover-symbol.buy-signal {
+  color: var(--buy) !important;
+}
+
+.wf-mover-symbol.sell-signal {
+  color: var(--sell) !important;
+}
+
+.wf-mover-company.buy-signal {
+  color: var(--buy) !important;
+}
+
+.wf-mover-company.sell-signal {
+  color: var(--sell) !important;
+}
+
+/* Position remove button at top right */
+.wf-pill-btn.remove.top-right {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+}
+
+/* Details button at bottom right */
+.wf-btn.details-bottom {
+  align-self: flex-end;
+  margin-top: auto;
+  width: 100px;
+  border: 1px dashed var(--outline);
+}
 .wf-metrics{display:grid;grid-template-columns:0.7fr 1.3fr;gap:4px;font-size:12px;color:var(--muted)}
 .wf-metrics-wide{grid-column:1/-1}
 .wf-kv{display:flex;justify-content:space-between;border:1px dashed var(--outline);border-radius:6px;padding:5px 8px;min-height:26px;align-items:center;word-wrap:break-word;overflow:hidden}
@@ -577,10 +617,30 @@ a{color:var(--text);text-decoration:none}
   transform: translateY(-1px);
 }
 
+/* Screener Cards - taller version for buttons */
+.wf-screener-card {
+  background: linear-gradient(135deg, rgba(255,255,255,0.02) 0%, rgba(255,255,255,0.01) 100%);
+  border: 1px dashed var(--outline);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: all 0.2s ease;
+  min-height: 220px;
+  position: relative;
+}
+
+.wf-screener-card:hover {
+  border-color: rgba(255,255,255,0.3);
+  background: linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%);
+  transform: translateY(-1px);
+}
+
 .wf-mover-header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
   gap: 8px;
 }
 
@@ -590,6 +650,12 @@ a{color:var(--text);text-decoration:none}
   gap: 2px;
   flex: 1;
   min-width: 0;
+}
+
+.wf-mover-badge-container {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .wf-mover-symbol {

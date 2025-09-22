@@ -20,35 +20,86 @@ function stockCard(s) {
     if (value == null || value === undefined || isNaN(value)) return "-";
     return Number(value).toFixed(decimals);
   };
-  
+
+  const formatPrice = (price) => {
+    if (!price || price === 0) return "-";
+    return "₹" + Number(price).toFixed(2);
+  };
+
   const formatVolume = (volume) => {
     if (!volume || volume === 0) return "-";
-    return Number(volume).toLocaleString();
+    const num = Number(volume);
+    if (num >= 10000000) { // 1 crore
+      return `${(num / 10000000).toFixed(1)}Cr`;
+    } else if (num >= 100000) { // 1 lakh
+      return `${(num / 100000).toFixed(1)}L`;
+    } else if (num >= 1000) { // 1 thousand
+      return `${(num / 1000).toFixed(1)}K`;
+    }
+    return num.toLocaleString();
   };
-  
-  return `<div class="wf-stock-card">
-    <div class="wf-stock-head">
-      <div><strong>${s.symbol}</strong> <span class="wf-tag">${s.name || ""}</span></div>
-      <div class="wf-pill ${s.signal?.direction === "BUY" ? "buy" : (s.signal?.direction === "SELL" ? "sell" : "")}">
-        ${s.signal?.direction || "HOLD"}
+
+  const formatChange = (change) => {
+    if (change == null) return "-";
+    const num = Number(change);
+    const sign = num > 0 ? "+" : "";
+    return `${sign}${num.toFixed(2)}%`;
+  };
+
+  // Determine signal badge
+  let signalClass = "";
+  let signalText = "HOLD";
+  if (s.signal?.direction === "BUY") {
+    signalClass = "gainer";
+    signalText = "BUY";
+  } else if (s.signal?.direction === "SELL") {
+    signalClass = "loser";
+    signalText = "SELL";
+  }
+
+  // Determine signal color for text
+  let signalColorClass = "";
+  if (s.signal?.direction === "BUY") {
+    signalColorClass = "buy-signal";
+  } else if (s.signal?.direction === "SELL") {
+    signalColorClass = "sell-signal";
+  }
+
+  return `<div class="wf-screener-card">
+    <div class="wf-mover-header">
+      <div class="wf-mover-title">
+        <span class="wf-mover-symbol ${signalColorClass}">${s.symbol}</span>
+        ${s.name ? `<span class="wf-mover-company ${signalColorClass}">${s.name}</span>` : ''}
+      </div>
+      <button class="wf-pill-btn remove top-right" onclick="removeFromWatchlist('${s.symbol}')" title="Remove from watchlist">Remove</button>
+    </div>
+    <div class="wf-mover-metrics">
+      <div class="wf-mover-metric">
+        <span class="wf-mover-metric-label">Price</span>
+        <span class="wf-mover-metric-value">${formatPrice(s.price)}</span>
+      </div>
+      <div class="wf-mover-metric">
+        <span class="wf-mover-metric-label">Change</span>
+        <span class="wf-mover-metric-value ${s.gap > 0 ? 'positive' : s.gap < 0 ? 'negative' : ''}">${formatChange(s.gap)}</span>
+      </div>
+      <div class="wf-mover-metric">
+        <span class="wf-mover-metric-label">Volume</span>
+        <span class="wf-mover-metric-value">${formatVolume(s.volume)}</span>
+      </div>
+      <div class="wf-mover-metric">
+        <span class="wf-mover-metric-label">RSI</span>
+        <span class="wf-mover-metric-value">${formatNumber(s.rsi, 1)}</span>
+      </div>
+      <div class="wf-mover-metric compact">
+        <span class="wf-mover-metric-label">Bollinger</span>
+        <span class="wf-mover-metric-value">${formatNumber(s.bb_upper, 0)}/${formatNumber(s.bb_lower, 0)}</span>
+      </div>
+      <div class="wf-mover-metric compact wf-metrics-wide">
+        <span class="wf-mover-metric-label">MA20/50/200</span>
+        <span class="wf-mover-metric-value">${formatNumber(s.ma20, 0)}/${formatNumber(s.ma50, 0)}/${formatNumber(s.ma200, 0)}</span>
       </div>
     </div>
-    <div class="wf-metrics">
-      <div class="wf-kv"><span>Price</span><span>₹${formatNumber(s.price, 2)}</span></div>
-      <div class="wf-kv"><span>Volume</span><span>${formatVolume(s.volume)}</span></div>
-      <div class="wf-kv"><span>Gap</span><span>${formatNumber(s.gap, 2)}%</span></div>
-      <div class="wf-kv"><span>VWAP</span><span>₹${formatNumber(s.vwap, 2)}</span></div>
-      <div class="wf-kv"><span>RSI</span><span>${formatNumber(s.rsi, 1)}</span></div>
-      <div class="wf-kv compact"><span>Bollinger</span><span>${formatNumber(s.bb_upper, 0)}/${formatNumber(s.bb_lower, 0)}</span></div>
-      <div class="wf-kv compact wf-metrics-wide"><span>MA20/50/200</span><span>${formatNumber(s.ma20, 0)}/${formatNumber(s.ma50, 0)}/${formatNumber(s.ma200, 0)}</span></div>
-    </div>
-    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:auto">
-      <span class="wf-tag">Entry: ${formatNumber(s.signal?.entry, 2)}</span>
-      <span class="wf-tag">SL: ${formatNumber(s.signal?.sl, 2)}</span>
-      <span class="wf-tag">Target: ${formatNumber(s.signal?.target, 2)}</span>
-      <a class="wf-btn" href="/stock.html?symbol=${encodeURIComponent(s.symbol)}">Open</a>
-      <button class="wf-pill-btn remove" onclick="removeFromWatchlist('${s.symbol}')">Remove</button>
-    </div>
+    <a class="wf-btn details-bottom" href="/stock.html?symbol=${encodeURIComponent(s.symbol)}">Details</a>
   </div>`;
 }
 
