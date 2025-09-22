@@ -119,23 +119,78 @@ function renderOverview() {
   const ms = document.getElementById("market-snapshot");
   if (ms) {
     getJSON("/nifty-movers").then(data => {
+      // Format numbers nicely
+      const formatPrice = (price) => {
+        if (!price || price === 0) return "-";
+        return "₹" + Number(price).toFixed(2);
+      };
+
+      const formatChange = (change) => {
+        if (change == null) return "-";
+        const num = Number(change);
+        const sign = num > 0 ? "+" : "";
+        return `${sign}${num.toFixed(2)}%`;
+      };
+
+      const formatVolume = (volume) => {
+        if (!volume || volume === 0) return "-";
+        const num = Number(volume);
+        if (num >= 10000000) { // 1 crore
+          return `${(num / 10000000).toFixed(1)}Cr`;
+        } else if (num >= 100000) { // 1 lakh
+          return `${(num / 100000).toFixed(1)}L`;
+        } else if (num >= 1000) { // 1 thousand
+          return `${(num / 1000).toFixed(1)}K`;
+        }
+        return num.toLocaleString();
+      };
+
       let html = '';
-      html += data.gainers.slice(0, 10).map(g => `<div class="wf-stock-card">
-        <div class="wf-stock-head"><div><strong>${g.symbol}</strong></div><div class="wf-pill buy">Gainer</div></div>
-        <div class="wf-metrics">
-          <div class="wf-kv"><span>Last</span><span>${g.ltp}</span></div>
-          <div class="wf-kv"><span>Change</span><span>${g.perChange}%</span></div>
-          <div class="wf-kv"><span>Vol</span><span>${g.trade_quantity}</span></div>
+
+      // Show top 8 gainers
+      html += data.gainers.slice(0, 8).map(g => `<div class="wf-mover-card">
+        <div class="wf-mover-header">
+          <span class="wf-mover-symbol">${g.symbol}</span>
+          <span class="wf-mover-badge gainer">Gainer</span>
+        </div>
+        <div class="wf-mover-metrics">
+          <div class="wf-mover-metric">
+            <span class="wf-mover-metric-label">Last</span>
+            <span class="wf-mover-metric-value">${formatPrice(g.ltp)}</span>
+          </div>
+          <div class="wf-mover-metric">
+            <span class="wf-mover-metric-label">Change</span>
+            <span class="wf-mover-metric-value positive">${formatChange(g.perChange)}</span>
+          </div>
+          <div class="wf-mover-metric">
+            <span class="wf-mover-metric-label">Volume</span>
+            <span class="wf-mover-metric-value">${formatVolume(g.trade_quantity)}</span>
+          </div>
         </div>
       </div>`).join("");
-      html += data.losers.slice(0, 7).map(l => `<div class="wf-stock-card">
-        <div class="wf-stock-head"><div><strong>${l.symbol}</strong></div><div class="wf-pill sell">Loser</div></div>
-        <div class="wf-metrics">
-          <div class="wf-kv"><span>Last</span><span>${l.ltp}</span></div>
-          <div class="wf-kv"><span>Change</span><span>${l.perChange}%</span></div>
-          <div class="wf-kv"><span>Vol</span><span>${l.trade_quantity}</span></div>
+
+      // Show top 7 losers
+      html += data.losers.slice(0, 7).map(l => `<div class="wf-mover-card">
+        <div class="wf-mover-header">
+          <span class="wf-mover-symbol">${l.symbol}</span>
+          <span class="wf-mover-badge loser">Loser</span>
+        </div>
+        <div class="wf-mover-metrics">
+          <div class="wf-mover-metric">
+            <span class="wf-mover-metric-label">Last</span>
+            <span class="wf-mover-metric-value">${formatPrice(l.ltp)}</span>
+          </div>
+          <div class="wf-mover-metric">
+            <span class="wf-mover-metric-label">Change</span>
+            <span class="wf-mover-metric-value negative">${formatChange(l.perChange)}</span>
+          </div>
+          <div class="wf-mover-metric">
+            <span class="wf-mover-metric-label">Volume</span>
+            <span class="wf-mover-metric-value">${formatVolume(l.trade_quantity)}</span>
+          </div>
         </div>
       </div>`).join("");
+
       ms.innerHTML = html;
     }).catch(() => {
       ms.innerHTML = '<div class="wf-skel">Could not load NIFTY movers.</div>';
@@ -863,6 +918,8 @@ async function loadSettingsData() {
     // Update Telegram button and status
     const telegramBtn = document.getElementById("link-telegram");
     const telegramStatusEl = document.getElementById("telegram-status");
+    const telegramBadge = document.getElementById("telegram-status-badge");
+    const telegramTitle = document.querySelector('.wf-integration:nth-child(1) .wf-title');
     
     if (telegramBtn) {
       telegramBtn.textContent = s.telegram_linked ? "Reconfigure" : "Link";
@@ -871,14 +928,26 @@ async function loadSettingsData() {
     if (telegramStatusEl) {
       if (s.telegram_linked) {
         telegramStatusEl.innerHTML = `<span class="wf-status-indicator connected">Connected - Alerts Active</span> Bot ready to send notifications`;
+        if (telegramBadge) {
+          telegramBadge.textContent = "Connected";
+          telegramBadge.className = "wf-status-indicator connected";
+        }
+        if (telegramTitle) telegramTitle.classList.add('connected');
       } else {
         telegramStatusEl.innerHTML = `<span class="wf-status-indicator disconnected">Not Connected - No Alerts</span> Click 'Link' to connect & receive notifications`;
+        if (telegramBadge) {
+          telegramBadge.textContent = "Disconnected";
+          telegramBadge.className = "wf-status-indicator disconnected";
+        }
+        if (telegramTitle) telegramTitle.classList.remove('connected');
       }
     }
     
     // Update Upstox status
     const statusEl = document.getElementById("upstox-status");
     const configBtn = document.getElementById("upstox-config");
+    const upstoxBadge = document.getElementById("upstox-status-badge");
+    const upstoxTitle = document.querySelector('.wf-integration:nth-child(2) .wf-title');
     
     if (statusEl && configBtn) {
       if (s.upstox_connected) {
@@ -886,9 +955,19 @@ async function loadSettingsData() {
       const expiryDate = expiry.toLocaleDateString() + " " + expiry.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
       statusEl.innerHTML = `<span class="wf-status-indicator connected">Connected - Real Data</span> Token expires: ${expiryDate}`;
       configBtn.textContent = "Reconfigure";
+      if (upstoxBadge) {
+        upstoxBadge.textContent = "Connected";
+        upstoxBadge.className = "wf-status-indicator connected";
+      }
+      if (upstoxTitle) upstoxTitle.classList.add('connected');
       } else {
         statusEl.innerHTML = `<span class="wf-status-indicator disconnected">Not Connected - Mock Data</span> Configure for real-time market data`;
         configBtn.textContent = "Configure";
+        if (upstoxBadge) {
+          upstoxBadge.textContent = "Disconnected";
+          upstoxBadge.className = "wf-status-indicator disconnected";
+        }
+        if (upstoxTitle) upstoxTitle.classList.remove('connected');
       }
     }
   } catch (error) {

@@ -66,8 +66,21 @@ a{color:var(--text);text-decoration:none}
 .wf-col-8{flex:1 1 65%}
 .wf-col-6{flex:1 1 48%}
 .wf-col-4{flex:1 1 32%}
-.wf-card{border:1px dashed var(--outline);background:var(--card);border-radius:14px;padding:14px;margin-bottom:16px}
-.wf-card-head{font-weight:600;margin-bottom:10px;display:flex;align-items:center;gap:10px;justify-content:space-between}
+.wf-card {
+  border: 1px dashed var(--outline);
+  background: linear-gradient(135deg, var(--card) 0%, rgba(15,23,42,0.8) 100%);
+  border-radius: 16px;
+  padding: 24px;
+  margin-bottom: 24px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.1), inset 0 1px 0 rgba(255,255,255,0.05);
+  transition: all 0.3s ease;
+}
+
+.wf-card:hover {
+  box-shadow: 0 8px 30px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.08);
+  transform: translateY(-2px);
+}
+.wf-card-head{font-weight:600;margin-bottom:16px;display:flex;align-items:center;gap:12px;justify-content:space-between;font-size:18px;border-bottom:1px dashed var(--outline);padding-bottom:12px}
 .wf-grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
 .wf-grid-2{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
 .wf-stock-card{border:1px dashed var(--outline);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:10px;min-height:220px;max-width:100%;overflow:hidden}
@@ -114,9 +127,11 @@ a{color:var(--text);text-decoration:none}
 .wf-alert.sell{border-color:var(--sell)}
 .wf-alert.warn{border-color:var(--warn)}
 .wf-filters{display:flex;gap:10px;flex-wrap:wrap}
-.wf-input{background:transparent;border:1px dashed var(--outline);border-radius:10px;padding:8px 10px;color:var(--text);min-width:160px}
-.wf-btn{background:transparent;border:1px dashed var(--outline);color:var(--text);padding:8px 12px;border-radius:10px;cursor:pointer;transition:all 0.2s ease;flex-shrink:0;white-space:nowrap}
-.wf-btn:hover{background:rgba(255,255,255,0.04)}
+.wf-input{background:linear-gradient(135deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%);border:1px dashed var(--outline);border-radius:12px;padding:12px 16px;color:var(--text);min-width:160px;font-size:14px;transition:all 0.2s ease}
+.wf-input:focus{background:linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.03) 100%);border-color:var(--accent);outline:none;box-shadow:0 0 0 3px rgba(209,213,219,0.1);transform:translateY(-1px)}
+.wf-btn{background:linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%);border:1px dashed var(--outline);color:var(--text);padding:10px 16px;border-radius:12px;cursor:pointer;transition:all 0.2s ease;flex-shrink:0;white-space:nowrap;font-weight:500}
+.wf-btn:hover{background:linear-gradient(135deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.04) 100%);border-color:rgba(255,255,255,0.3);transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,0.2)}
+.wf-btn:active{transform:translateY(0);box-shadow:0 2px 4px rgba(0,0,0,0.1)}
 .wf-btn.save {
   border-color: var(--buy);
   color: var(--buy);
@@ -150,11 +165,16 @@ a{color:var(--text);text-decoration:none}
 .wf-chart{height:220px;border:1px dashed var(--outline);border-radius:12px;display:flex;align-items:center;justify-content:center;color:var(--muted)}
 .wf-hint{color:var(--muted);font-size:12px;margin-top:8px}
 .wf-note{color:var(--muted);font-size:12px;margin-top:6px}
-.wf-stack{display:flex;flex-direction:column;gap:10px}
-.wf-integration{display:flex;align-items:flex-start;justify-content:space-between;border:1px dashed var(--outline);padding:12px;border-radius:12px;gap:16px}
+.wf-stack{display:flex;flex-direction:column;gap:16px}
+.wf-integration{display:flex;align-items:flex-start;justify-content:space-between;border:1px dashed var(--outline);padding:20px;border-radius:16px;gap:20px;background:linear-gradient(135deg, rgba(255,255,255,0.02) 0%, rgba(255,255,255,0.01) 100%);transition:all 0.2s ease}
+.wf-integration:hover{border-color:rgba(255,255,255,0.2);background:linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)}
 .wf-integration > div{flex:1;min-width:0}
-.wf-title{font-weight:600;margin-bottom:4px}
-.wf-subtle{color:var(--muted);font-size:13px;line-height:1.4;word-wrap:break-word}
+.wf-title{font-weight:600;margin-bottom:6px;font-size:16px;display:flex;align-items:center;gap:8px}
+.wf-title::before{content:'';width:8px;height:8px;border-radius:50%;background:var(--muted);display:inline-block}
+.wf-title.connected::before{background:var(--buy)}
+.wf-title.disconnected::before{background:var(--sell)}
+.wf-subtle{color:var(--muted);font-size:13px;line-height:1.5;word-wrap:break-word}
+.wf-integration .wf-btn{margin-top:8px}
 .wf-table-wrap{overflow:auto}
 .wf-table{width:100%;border-collapse:collapse}
 .wf-table th, .wf-table td{border:1px dashed var(--outline);padding:8px;text-align:left}
@@ -504,7 +524,98 @@ a{color:var(--text);text-decoration:none}
   border-color: #dc2626;
 }
 
+/* Status Indicators */
+.wf-status-indicator{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:20px;font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px}
+.wf-status-indicator.connected{background:linear-gradient(135deg, rgba(16,185,129,0.1) 0%, rgba(16,185,129,0.05) 100%);color:var(--buy);border:1px solid rgba(16,185,129,0.2)}
+.wf-status-indicator.disconnected{background:linear-gradient(135deg, rgba(156,163,175,0.1) 0%, rgba(156,163,175,0.05) 100%);color:var(--muted);border:1px solid rgba(156,163,175,0.2)}
+
 .wf-btn:hover {
   transform: translateY(-1px);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* Top Movers Cards */
+.wf-mover-card {
+  background: linear-gradient(135deg, rgba(255,255,255,0.02) 0%, rgba(255,255,255,0.01) 100%);
+  border: 1px dashed var(--outline);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: all 0.2s ease;
+  height: 140px;
+}
+
+.wf-mover-card:hover {
+  border-color: rgba(255,255,255,0.3);
+  background: linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%);
+  transform: translateY(-1px);
+}
+
+.wf-mover-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.wf-mover-symbol {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.wf-mover-badge {
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.wf-mover-badge.gainer {
+  background: rgba(16,185,129,0.1);
+  color: var(--buy);
+  border: 1px solid rgba(16,185,129,0.2);
+}
+
+.wf-mover-badge.loser {
+  background: rgba(239,68,68,0.1);
+  color: var(--sell);
+  border: 1px solid rgba(239,68,68,0.2);
+}
+
+.wf-mover-metrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+  flex: 1;
+}
+
+.wf-mover-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.wf-mover-metric-label {
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 500;
+}
+
+.wf-mover-metric-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.wf-mover-metric-value.positive {
+  color: var(--buy);
+}
+
+.wf-mover-metric-value.negative {
+  color: var(--sell);
 }

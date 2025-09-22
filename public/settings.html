@@ -29,14 +29,14 @@
         <div class="wf-stack">
           <div class="wf-integration">
             <div>
-              <div class="wf-title">Telegram</div>
+              <div class="wf-title">Telegram <span id="telegram-status-badge" class="wf-status-indicator disconnected">Disconnected</span></div>
               <div class="wf-subtle" id="telegram-status">Send alerts to your chat.</div>
             </div>
             <button id="link-telegram" class="wf-btn">Link</button>
           </div>
           <div class="wf-integration">
             <div>
-              <div class="wf-title">Upstox API</div>
+              <div class="wf-title">Upstox API <span id="upstox-status-badge" class="wf-status-indicator disconnected">Disconnected</span></div>
               <div class="wf-subtle" id="upstox-status">Configure for real-time market data.</div>
             </div>
             <button id="upstox-config" class="wf-btn">Configure</button>
@@ -108,17 +108,18 @@
       <div class="wf-card">
         <div class="wf-card-head">Alert Thresholds</div>
         <div class="wf-filters">
-          <div style="display: flex; flex-direction: column; gap: 4px;">
-            <label for="th-gap" style="font-size: 12px; color: var(--muted);">Gap % Trigger</label>
-            <input id="th-gap" class="wf-input" type="number" step="0.1" placeholder="e.g. 5.0" />
+          <div class="wf-threshold-group">
+            <label for="th-gap" class="wf-threshold-label">Gap % Trigger</label>
+            <input id="th-gap" class="wf-input wf-threshold-input" type="number" step="0.1" placeholder="e.g. 5.0" />
+            <div class="wf-threshold-help">Minimum gap percentage to trigger alerts</div>
           </div>
-          <div style="display: flex; flex-direction: column; gap: 4px;">
-            <label for="th-rsi" style="font-size: 12px; color: var(--muted);">RSI Trigger</label>
-            <input id="th-rsi" class="wf-input" type="number" placeholder="e.g. 30" />
+          <div class="wf-threshold-group">
+            <label for="th-rsi" class="wf-threshold-label">RSI Trigger</label>
+            <input id="th-rsi" class="wf-input wf-threshold-input" type="number" placeholder="e.g. 30" />
+            <div class="wf-threshold-help">RSI level for overbought/oversold signals</div>
           </div>
-          <div style="display: flex; flex-direction: column; gap: 4px;">
-            <div style="height: 14px;"></div> <!-- Perfect alignment spacer -->
-            <button id="save-settings" class="wf-btn">Save</button>
+          <div class="wf-threshold-actions">
+            <button id="save-settings" class="wf-btn primary">Save Settings</button>
           </div>
         </div>
       </div>
