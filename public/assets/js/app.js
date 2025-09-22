@@ -463,7 +463,7 @@ async function setupCandlestickChart(symbol) {
       width: chartContainer.offsetWidth,
       height: chartContainer.offsetHeight,
       layout: {
-        backgroundColor: '#0b1220',
+        backgroundColor: 'transparent',
         textColor: '#e5e7eb',
       },
       grid: {
@@ -550,6 +550,15 @@ async function setupCandlestickChart(symbol) {
     // Fit content to show the data
     chart.timeScale().fitContent();
 
+    // Force resize to ensure proper rendering
+    setTimeout(() => {
+      chart.applyOptions({ 
+        width: chartContainer.offsetWidth,
+        height: chartContainer.offsetHeight
+      });
+      chart.timeScale().fitContent();
+    }, 100);
+
     // Make chart responsive
     const resizeChart = () => {
       chart.applyOptions({ 
@@ -561,11 +570,6 @@ async function setupCandlestickChart(symbol) {
     window.addEventListener('resize', resizeChart);
 
     console.log(`Chart created successfully for ${symbol} with ${processedData.length} data points`);
-    
-    // Add a small delay to ensure the chart renders properly
-    setTimeout(() => {
-      chart.timeScale().fitContent();
-    }, 100);
 
   } catch (error) {
     console.error("Error setting up candlestick chart:", error);

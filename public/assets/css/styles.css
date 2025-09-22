@@ -90,6 +90,20 @@ a{color:var(--text);text-decoration:none}
 .wf-pill.buy{border-color:var(--buy);color:var(--buy)}
 .wf-pill.sell{border-color:var(--sell);color:var(--sell)}
 
+/* Stock detail card styling */
+.wf-stock-detail-card {
+  min-height: 400px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Chart container styling */
+#chart-container {
+  background: var(--card);
+  border: 1px dashed var(--outline);
+  border-radius: 8px;
+}
+
 /* Watchlist pill buttons */
 .wf-pill-btn{
   font-size:12px;
@@ -256,7 +270,7 @@ a{color:var(--text);text-decoration:none}
   display: flex;
   flex-direction: column;
   gap: 12px;
-  min-height: 350px;
+  min-height: 400px;
 }
 
 .wf-stock-header {
