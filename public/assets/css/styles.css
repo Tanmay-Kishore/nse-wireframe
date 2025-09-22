@@ -619,3 +619,95 @@ a{color:var(--text);text-decoration:none}
 .wf-mover-metric-value.negative {
   color: var(--sell);
 }
+
+/* Market Index Cards */
+.wf-index-card {
+  background: linear-gradient(135deg, rgba(255,255,255,0.02) 0%, rgba(255,255,255,0.01) 100%);
+  border: 1px dashed var(--outline);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: all 0.2s ease;
+  height: 180px;
+}
+
+.wf-index-card:hover {
+  border-color: rgba(255,255,255,0.3);
+  background: linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%);
+  transform: translateY(-1px);
+}
+
+.wf-index-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.wf-index-symbol {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.wf-index-badge {
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.wf-index-badge.buy {
+  background: rgba(16,185,129,0.1);
+  color: var(--buy);
+  border: 1px solid rgba(16,185,129,0.2);
+}
+
+.wf-index-badge.sell {
+  background: rgba(239,68,68,0.1);
+  color: var(--sell);
+  border: 1px solid rgba(239,68,68,0.2);
+}
+
+.wf-index-badge.error {
+  background: rgba(245,158,11,0.1);
+  color: var(--warn);
+  border: 1px solid rgba(245,158,11,0.2);
+}
+
+.wf-index-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  flex: 1;
+}
+
+.wf-index-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.wf-index-metric-label {
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 500;
+}
+
+.wf-index-metric-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.wf-index-metric-value.positive {
+  color: var(--buy);
+}
+
+.wf-index-metric-value.negative {
+  color: var(--sell);
+}

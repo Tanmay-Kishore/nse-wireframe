@@ -57,60 +57,113 @@ function renderOverview() {
   getJSON("/index-quotes").then(data => {
     const grid = document.getElementById("indexes-grid");
     if (!grid) return;
+
+    // Format numbers nicely for indexes
+    const formatIndexPrice = (price) => {
+      if (!price || price === 0) return "-";
+      return Number(price).toFixed(2);
+    };
+
+    const formatIndexVolume = (volume) => {
+      if (!volume || volume === 0) return "-";
+      const num = Number(volume);
+      if (num >= 10000000) { // 1 crore
+        return `${(num / 10000000).toFixed(1)}Cr`;
+      } else if (num >= 100000) { // 1 lakh
+        return `${(num / 100000).toFixed(1)}L`;
+      } else if (num >= 1000) { // 1 thousand
+        return `${(num / 1000).toFixed(1)}K`;
+      }
+      return num.toLocaleString();
+    };
+
     grid.innerHTML = Object.entries(data).map(([symbol, idx]) => {
       if (idx.error) {
-        return `<div class="wf-stock-card"><div class="wf-stock-head"><strong>${symbol}</strong></div><div class="wf-metrics"><span class="wf-tag">Error: ${idx.error}</span></div></div>`;
+        return `<div class="wf-index-card">
+          <div class="wf-index-header">
+            <span class="wf-index-symbol">${symbol}</span>
+            <span class="wf-index-badge error">Error</span>
+          </div>
+          <div class="wf-index-metrics">
+            <div class="wf-index-metric">
+              <span class="wf-index-metric-label">Status</span>
+              <span class="wf-index-metric-value">${idx.error}</span>
+            </div>
+          </div>
+        </div>`;
       }
+
       const live = idx.live_ohlc || {};
       const prev = idx.prev_ohlc || {};
+
       // Determine price movement
-        let pillClass = "";
-        let pillText = "-";
-        const last = Number(idx.last_price);
-        const prevClose = Number(prev.close);
-        const open = Number(live.open);
-        if (!isNaN(last)) {
-          if (!isNaN(prevClose)) {
-            if (last > prevClose) {
-              pillClass = "buy";
-              pillText = "▲";
-            } else if (last < prevClose) {
-              pillClass = "sell";
-              pillText = "▼";
-            } else {
-              pillClass = "";
-              pillText = "■";
-            }
-          } else if (!isNaN(open)) {
-            if (last > open) {
-              pillClass = "buy";
-              pillText = "▲";
-            } else if (last < open) {
-              pillClass = "sell";
-              pillText = "▼";
-            } else {
-              pillClass = "";
-              pillText = "■";
-            }
+      let pillClass = "";
+      let pillText = "-";
+      const last = Number(idx.last_price);
+      const prevClose = Number(prev.close);
+      const open = Number(live.open);
+
+      if (!isNaN(last)) {
+        if (!isNaN(prevClose)) {
+          if (last > prevClose) {
+            pillClass = "buy";
+            pillText = "▲";
+          } else if (last < prevClose) {
+            pillClass = "sell";
+            pillText = "▼";
           } else {
             pillClass = "";
             pillText = "■";
           }
+        } else if (!isNaN(open)) {
+          if (last > open) {
+            pillClass = "buy";
+            pillText = "▲";
+          } else if (last < open) {
+            pillClass = "sell";
+            pillText = "▼";
+          } else {
+            pillClass = "";
+            pillText = "■";
+          }
+        } else {
+          pillClass = "";
+          pillText = "■";
         }
-        return `<div class="wf-stock-card">
-          <div class="wf-stock-head">
-            <div><strong>${symbol}</strong></div>
-            <div class="wf-pill ${pillClass}">${pillText}</div>
+      }
+
+      return `<div class="wf-index-card">
+        <div class="wf-index-header">
+          <span class="wf-index-symbol">${symbol}</span>
+          <span class="wf-index-badge ${pillClass}">${pillText}</span>
+        </div>
+        <div class="wf-index-metrics">
+          <div class="wf-index-metric">
+            <span class="wf-index-metric-label">Last</span>
+            <span class="wf-index-metric-value">${formatIndexPrice(idx.last_price)}</span>
           </div>
-          <div class="wf-metrics">
-            <div class="wf-kv"><span>Last</span><span>${idx.last_price ?? '-'}</span></div>
-            <div class="wf-kv"><span>Open</span><span>${live.open ?? '-'}</span></div>
-            <div class="wf-kv"><span>High</span><span>${live.high ?? '-'}</span></div>
-            <div class="wf-kv"><span>Low</span><span>${live.low ?? '-'}</span></div>
-            <div class="wf-kv"><span>Close</span><span>${live.close ?? '-'}</span></div>
-            <div class="wf-kv"><span>Volume</span><span>${live.volume ?? '-'}</span></div>
+          <div class="wf-index-metric">
+            <span class="wf-index-metric-label">Change</span>
+            <span class="wf-index-metric-value ${last > (prevClose || open) ? 'positive' : last < (prevClose || open) ? 'negative' : ''}">${prevClose ? (last - prevClose > 0 ? '+' : '') + (last - prevClose).toFixed(2) : '-'}</span>
           </div>
-        </div>`;
+          <div class="wf-index-metric">
+            <span class="wf-index-metric-label">Volume</span>
+            <span class="wf-index-metric-value">${formatIndexVolume(live.volume)}</span>
+          </div>
+          <div class="wf-index-metric">
+            <span class="wf-index-metric-label">High</span>
+            <span class="wf-index-metric-value">${formatIndexPrice(live.high)}</span>
+          </div>
+          <div class="wf-index-metric">
+            <span class="wf-index-metric-label">Low</span>
+            <span class="wf-index-metric-value">${formatIndexPrice(live.low)}</span>
+          </div>
+          <div class="wf-index-metric">
+            <span class="wf-index-metric-label">Open</span>
+            <span class="wf-index-metric-value">${formatIndexPrice(live.open)}</span>
+          </div>
+        </div>
+      </div>`;
     }).join("");
   }).catch(console.error);
 
