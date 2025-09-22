@@ -457,122 +457,169 @@ async function setupCandlestickChart(symbol) {
 }
 
 function createCustomChart(container, data, symbol) {
-  // Store data for resize
-  container._chartData = { data, symbol };
+  // Get container dimensions
+  const rect = container.getBoundingClientRect();
+  const width = rect.width || 400;
+  const height = rect.height || 300;
 
-  function renderChart() {
-    // Clear existing content
-    container.innerHTML = '';
+  // Create SVG element
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('width', '100%');
+  svg.setAttribute('height', '100%');
+  svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+  svg.style.background = 'transparent';
 
-    // Get container dimensions
-    const rect = container.getBoundingClientRect();
-    const width = rect.width || 400;
-    const height = rect.height || 300;
-
-    // Create SVG element
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('width', '100%');
-    svg.setAttribute('height', '100%');
-    svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
-    svg.style.background = 'transparent';
-
-    // Process data for simple line chart
-    const prices = data.map(d => parseFloat(d.close)).filter(p => !isNaN(p));
-    if (prices.length === 0) {
-      container.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--text);">No valid price data</div>';
-      return;
-    }
-
-    const minPrice = Math.min(...prices);
-    const maxPrice = Math.max(...prices);
-    const priceRange = maxPrice - minPrice || 1;
-
-    // Create path for price line
-    let pathData = '';
-    prices.forEach((price, index) => {
-      const x = 40 + (index / (prices.length - 1)) * (width - 80);
-      const y = height - 40 - ((price - minPrice) / priceRange) * (height - 80);
-      pathData += (index === 0 ? 'M' : 'L') + x + ',' + y;
-    });
-
-    // Create path element
-    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    path.setAttribute('d', pathData);
-    path.setAttribute('stroke', 'var(--buy)');
-    path.setAttribute('stroke-width', '2');
-    path.setAttribute('fill', 'none');
-    path.style.filter = 'drop-shadow(0 0 4px rgba(16, 185, 129, 0.3))';
-
-    // Add grid lines
-    for (let i = 0; i <= 5; i++) {
-      const y = 20 + (i * (height - 40) / 5);
-      const gridLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-      gridLine.setAttribute('x1', '40');
-      gridLine.setAttribute('y1', y);
-      gridLine.setAttribute('x2', width - 20);
-      gridLine.setAttribute('y2', y);
-      gridLine.setAttribute('stroke', 'var(--outline)');
-      gridLine.setAttribute('stroke-dasharray', '2,2');
-      gridLine.setAttribute('opacity', '0.3');
-      svg.appendChild(gridLine);
-    }
-
-    // Add price labels
-    for (let i = 0; i <= 4; i++) {
-      const price = minPrice + (priceRange * (4 - i) / 4);
-      const y = 25 + (i * (height - 45) / 4);
-
-      const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-      text.setAttribute('x', '5');
-      text.setAttribute('y', y + 3);
-      text.setAttribute('fill', 'var(--muted)');
-      text.setAttribute('font-size', '10px');
-      text.setAttribute('font-family', 'Inter, sans-serif');
-      text.textContent = '₹' + price.toFixed(2);
-      svg.appendChild(text);
-    }
-
-    // Add current price indicator
-    const currentPrice = prices[prices.length - 1];
-    const currentY = height - 40 - ((currentPrice - minPrice) / priceRange) * (height - 80);
-
-    const currentPriceLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-    currentPriceLine.setAttribute('x1', '40');
-    currentPriceLine.setAttribute('y1', currentY);
-    currentPriceLine.setAttribute('x2', width - 20);
-    currentPriceLine.setAttribute('y2', currentY);
-    currentPriceLine.setAttribute('stroke', 'var(--accent)');
-    currentPriceLine.setAttribute('stroke-width', '1');
-    currentPriceLine.setAttribute('stroke-dasharray', '4,4');
-    svg.appendChild(currentPriceLine);
-
-    const currentPriceText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-    currentPriceText.setAttribute('x', width - 80);
-    currentPriceText.setAttribute('y', currentY - 5);
-    currentPriceText.setAttribute('fill', 'var(--accent)');
-    currentPriceText.setAttribute('font-size', '11px');
-    currentPriceText.setAttribute('font-family', 'Inter, sans-serif');
-    currentPriceText.setAttribute('font-weight', 'bold');
-    currentPriceText.textContent = '₹' + currentPrice.toFixed(2);
-    svg.appendChild(currentPriceText);
-
-    // Add path to SVG
-    svg.appendChild(path);
-
-    // Add SVG to container
-    container.appendChild(svg);
+  // Process data for simple line chart
+  const prices = data.map(d => parseFloat(d.close)).filter(p => !isNaN(p));
+  if (prices.length === 0) {
+    container.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--text);">No valid price data</div>';
+    return;
   }
 
-  // Initial render
-  renderChart();
+  const minPrice = Math.min(...prices);
+  const maxPrice = Math.max(...prices);
+  const priceRange = maxPrice - minPrice || 1;
+
+  // Create path for price line
+  let pathData = '';
+  prices.forEach((price, index) => {
+    const x = 40 + (index / (prices.length - 1)) * (width - 80);
+    const y = height - 40 - ((price - minPrice) / priceRange) * (height - 80);
+    pathData += (index === 0 ? 'M' : 'L') + x + ',' + y;
+  });
+
+  // Create path element
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  path.setAttribute('d', pathData);
+  path.setAttribute('stroke', 'var(--buy)');
+  path.setAttribute('stroke-width', '2');
+  path.setAttribute('fill', 'none');
+  path.style.filter = 'drop-shadow(0 0 4px rgba(16, 185, 129, 0.3))';
+
+  // Add grid lines
+  for (let i = 0; i <= 5; i++) {
+    const y = 20 + (i * (height - 40) / 5);
+    const gridLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    gridLine.setAttribute('x1', '40');
+    gridLine.setAttribute('y1', y);
+    gridLine.setAttribute('x2', width - 20);
+    gridLine.setAttribute('y2', y);
+    gridLine.setAttribute('stroke', 'var(--outline)');
+    gridLine.setAttribute('stroke-dasharray', '2,2');
+    gridLine.setAttribute('opacity', '0.3');
+    svg.appendChild(gridLine);
+  }
+
+  // Add price labels
+  for (let i = 0; i <= 4; i++) {
+    const price = minPrice + (priceRange * (4 - i) / 4);
+    const y = 25 + (i * (height - 45) / 4);
+
+    const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    text.setAttribute('x', '5');
+    text.setAttribute('y', y + 3);
+    text.setAttribute('fill', 'var(--muted)');
+    text.setAttribute('font-size', '10px');
+    text.setAttribute('font-family', 'Inter, sans-serif');
+    text.textContent = '₹' + price.toFixed(2);
+    svg.appendChild(text);
+  }
+
+  // Add current price indicator
+  const currentPrice = prices[prices.length - 1];
+  const currentY = height - 40 - ((currentPrice - minPrice) / priceRange) * (height - 80);
+
+  const currentPriceLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+  currentPriceLine.setAttribute('x1', '40');
+  currentPriceLine.setAttribute('y1', currentY);
+  currentPriceLine.setAttribute('x2', width - 20);
+  currentPriceLine.setAttribute('y2', currentY);
+  currentPriceLine.setAttribute('stroke', 'var(--accent)');
+  currentPriceLine.setAttribute('stroke-width', '1');
+  currentPriceLine.setAttribute('stroke-dasharray', '4,4');
+  svg.appendChild(currentPriceLine);
+
+  const currentPriceText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+  currentPriceText.setAttribute('x', width - 80);
+  currentPriceText.setAttribute('y', currentY - 5);
+  currentPriceText.setAttribute('fill', 'var(--accent)');
+  currentPriceText.setAttribute('font-size', '11px');
+  currentPriceText.setAttribute('font-family', 'Inter, sans-serif');
+  currentPriceText.setAttribute('font-weight', 'bold');
+  currentPriceText.textContent = '₹' + currentPrice.toFixed(2);
+  svg.appendChild(currentPriceText);
+
+  // Add path to SVG
+  svg.appendChild(path);
+
+  // Add SVG to container
+  container.appendChild(svg);
 
   // Make chart responsive
   function resizeChart() {
-    renderChart();
+    const newRect = container.getBoundingClientRect();
+    svg.setAttribute('viewBox', `0 0 ${newRect.width} ${newRect.height}`);
   }
 
   window.addEventListener('resize', resizeChart);
 }
+      layout: {
+        backgroundColor: 'transparent',
+        textColor: '#e5e7eb',
+      },
+      grid: {
+        vertLines: { 
+          color: 'rgba(55, 65, 81, 0.3)',
+          style: 1,
+        },
+        horzLines: { 
+          color: 'rgba(55, 65, 81, 0.3)',
+          style: 1,
+        },
+      },
+      crosshair: {
+        mode: LightweightCharts.CrosshairMode.Normal,
+        vertLine: {
+          color: '#9ca3af',
+        },
+        horzLine: {
+          color: '#9ca3af',
+        },
+      },
+      priceScale: {
+        borderColor: '#374151',
+      },
+      timeScale: {
+        borderColor: '#374151',
+        timeVisible: true,
+        secondsVisible: false,
+      },
+    });
+
+    // Add candlestick series
+    const candlestickSeries = chart.addCandlestickSeries({
+      upColor: '#10b981',
+      downColor: '#ef4444',
+      borderDownColor: '#ef4444',
+      borderUpColor: '#10b981',
+      wickDownColor: '#ef4444',
+      wickUpColor: '#10b981',
+    });
+
+    // Process and set data
+    const processedData = chartData.data
+      .map(item => {
+        console.log("Processing data item:", item);
+        
+        // Ensure all values are valid numbers
+        const open = parseFloat(item.open);
+        const high = parseFloat(item.high);
+        const low = parseFloat(item.low);
+        const close = parseFloat(item.close);
+        
+  window.addEventListener('resize', resizeChart);
+}
+
 async function setupWatchlistButton(symbol) {
   const btn = document.getElementById("watchlist-btn");
   if (!btn) return;
