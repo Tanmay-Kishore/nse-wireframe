@@ -169,11 +169,24 @@ async def get_journal(limit: int = 50):
 
             # Calculate current P&L if trade is open
             current_pnl = 0
+            current_pnl_percent = 0
             if trade.get("status") == "OPEN" and current_price > 0 and entry_price > 0:
                 if action == "BUY":
                     current_pnl = round((current_price - entry_price) * quantity, 2)
+                    current_pnl_percent = round(((current_price - entry_price) / entry_price) * 100, 2)
                 elif action == "SELL":
                     current_pnl = round((entry_price - current_price) * quantity, 2)
+                    current_pnl_percent = round(((entry_price - current_price) / entry_price) * 100, 2)
+
+            # Calculate percentage for closed trades
+            pnl_percent = 0
+            if trade.get("status") == "CLOSED" and entry_price > 0:
+                exit_price = trade.get("exit_price", 0)
+                if exit_price > 0:
+                    if action == "BUY":
+                        pnl_percent = round(((exit_price - entry_price) / entry_price) * 100, 2)
+                    elif action == "SELL":
+                        pnl_percent = round(((entry_price - exit_price) / entry_price) * 100, 2)
 
             formatted_trade = {
                 "date": trade.get("entry_time", ""),  # Frontend expects 'date'
@@ -185,7 +198,9 @@ async def get_journal(limit: int = 50):
                 "target": trade.get("target", 0),
                 "exit": trade.get("exit_price"),  # Can be null
                 "pnl": current_pnl if trade.get("status") == "OPEN" else trade.get("pnl", 0),  # Use current P&L for open trades, closed P&L for closed trades
+                "pnl_percent": current_pnl_percent if trade.get("status") == "OPEN" else pnl_percent,  # Percentage gain/loss
                 "current_pnl": current_pnl,  # NEW: Real-time P&L
+                "current_pnl_percent": current_pnl_percent,  # NEW: Real-time P&L percentage
                 # Additional fields for API users
                 "trade_id": trade.get("trade_id", ""),
                 "quantity": quantity,

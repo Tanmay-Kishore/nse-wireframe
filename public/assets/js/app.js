@@ -1095,9 +1095,11 @@ function renderJournal() {
       // Format current price with status color
       const currentPrice = r.current_price || 0;
       const currentPnL = r.current_pnl || 0;
+      const currentPnLPercent = r.current_pnl_percent || 0;
 
       // Use the correct P&L value - current_pnl for open trades, pnl for closed trades
       const displayPnL = r.status === 'OPEN' ? currentPnL : (r.pnl || 0);
+      const displayPnLPercent = r.status === 'OPEN' ? currentPnLPercent : (r.pnl_percent || 0);
       const statusClass = displayPnL > 0 ? 'profit' : displayPnL < 0 ? 'loss' : '';
 
       return `<tr>
@@ -1111,6 +1113,7 @@ function renderJournal() {
         <td>₹${r.target}</td>
         <td>${r.exit ? '₹' + r.exit : "-"}</td>
         <td class="${statusClass}">${displayPnL > 0 ? '+' : ''}₹${displayPnL.toFixed(2)}</td>
+        <td class="${statusClass}">${displayPnLPercent > 0 ? '+' : ''}${displayPnLPercent.toFixed(2)}%</td>
       </tr>`;
     }).join("");
   });
