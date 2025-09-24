@@ -72,33 +72,11 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         )
 
 @router.websocket("/ws/screener")
-async def ws_screener(websocket: WebSocket, token: Optional[str] = Query(None)):
+async def ws_screener(websocket: WebSocket):
     """WebSocket endpoint for real-time screener updates"""
     await websocket.accept()
     
-    # Validate JWT token
-    if not token:
-        await websocket.send_json({"error": "Authentication required"})
-        await websocket.close()
-        return
-    
-    try:
-        payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
-        user_id = payload.get("user_id")
-        if user_id is None:
-            await websocket.send_json({"error": "Invalid token: missing user_id"})
-            await websocket.close()
-            return
-    except jwt.ExpiredSignatureError:
-        await websocket.send_json({"error": "Token expired"})
-        await websocket.close()
-        return
-    except jwt.InvalidTokenError:
-        await websocket.send_json({"error": "Invalid token"})
-        await websocket.close()
-        return
-    
-    async with websocket_lifecycle(websocket, "/ws/screener", user_id):
+    async with websocket_lifecycle(websocket, "/ws/screener"):
         # Get all monitored symbols from journal and watchlist
         from routers.stocks import get_all_monitored_symbols
         symbols = get_all_monitored_symbols()
@@ -183,33 +161,11 @@ async def ws_screener(websocket: WebSocket, token: Optional[str] = Query(None)):
             return
 
 @router.websocket("/ws/price")
-async def ws_price(websocket: WebSocket, symbol: Optional[str] = Query(None), token: Optional[str] = Query(None)):
+async def ws_price(websocket: WebSocket, symbol: Optional[str] = Query(None)):
     """WebSocket endpoint for real-time price updates - now subscribes to all monitored symbols"""
     await websocket.accept()
     
-    # Validate JWT token
-    if not token:
-        await websocket.send_json({"error": "Authentication required"})
-        await websocket.close()
-        return
-    
-    try:
-        payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
-        user_id = payload.get("user_id")
-        if user_id is None:
-            await websocket.send_json({"error": "Invalid token: missing user_id"})
-            await websocket.close()
-            return
-    except jwt.ExpiredSignatureError:
-        await websocket.send_json({"error": "Token expired"})
-        await websocket.close()
-        return
-    except jwt.InvalidTokenError:
-        await websocket.send_json({"error": "Invalid token"})
-        await websocket.close()
-        return
-    
-    async with websocket_lifecycle(websocket, "/ws/price", user_id):
+    async with websocket_lifecycle(websocket, "/ws/price"):
         # Get all monitored symbols from journal and watchlist
         from routers.stocks import get_all_monitored_symbols
         symbols = get_all_monitored_symbols()

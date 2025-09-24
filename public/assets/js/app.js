@@ -381,8 +381,7 @@ function renderScreener() {
     }
 
     const badge = document.getElementById("screener-realtime-badge");
-    const token = getWebSocketToken();
-    screenerWebSocket = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws/screener?token=${encodeURIComponent(token)}`);
+    screenerWebSocket = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws/screener`);
 
     screenerWebSocket.onopen = () => {
       console.log("Screener WebSocket connected");
@@ -697,8 +696,7 @@ function setupJournalWebSocket() {
     journalWebSocket = null;
   }
 
-  const token = getWebSocketToken();
-  journalWebSocket = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws/price?token=${encodeURIComponent(token)}`);
+  journalWebSocket = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws/price`);
 
   journalWebSocket.onopen = () => {
     console.log("Journal WebSocket connected");
@@ -878,10 +876,9 @@ function renderStockDetail() {
 
     const badge = document.getElementById("realtime-badge");
     if (!badge) return; // No badge element, not on stock page
-
-    const token = getWebSocketToken();
+    
     // Remove symbol parameter since /ws/price now subscribes to all symbols
-    stockDetailWebSocket = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws/price?token=${encodeURIComponent(token)}`);
+    stockDetailWebSocket = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws/price`);
 
     stockDetailWebSocket.onopen = () => {
       badge.textContent = "RT: live";
@@ -1891,10 +1888,7 @@ function initAuth() {
         usernameInput.value = '';
         passwordInput.value = '';
 
-        // Reconnect WebSockets with new token
-        if (typeof setupScreenerWebSocket === 'function') setupScreenerWebSocket();
-        if (typeof setupPriceWebSocket === 'function') setupPriceWebSocket();
-
+        // WebSockets are now unauthenticated, no need to reconnect after login
         alert('Login successful!');
       } else {
         alert(data.detail || 'Login failed');
@@ -1909,16 +1903,7 @@ function initAuth() {
     auth.removeToken();
     updateAuthUI();
 
-    // Disconnect WebSockets
-    if (screenerWebSocket) {
-      screenerWebSocket.close();
-      screenerWebSocket = null;
-    }
-    if (priceWebSocket) {
-      priceWebSocket.close();
-      priceWebSocket = null;
-    }
-
+    // WebSockets are now unauthenticated, no need to disconnect them
     alert('Logged out successfully');
   });
 
