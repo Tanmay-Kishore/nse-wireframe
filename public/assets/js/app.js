@@ -693,9 +693,6 @@ function renderStockDetail() {
   const params = new URLSearchParams(location.search);
   const symbol = params.get("symbol") || "RELIANCE";
 
-  // Setup watchlist button
-  setupWatchlistButton(symbol);
-  
   // Setup candlestick chart
   setupCandlestickChart(symbol);
   
@@ -786,6 +783,9 @@ function renderStockDetail() {
         <div class="wf-note">Signals (wireframe): Entry / SL / Target are placeholders for demonstration.</div>
       </div>
     `;
+    
+    // Setup watchlist button after HTML is rendered
+    setupWatchlistButton(symbol);
     
     // Alerts list - handle missing alerts gracefully
     const al = document.getElementById("stock-alerts");
