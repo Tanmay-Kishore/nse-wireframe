@@ -7,7 +7,7 @@ import asyncio
 import logging
 import json
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
+from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes, ConversationHandler
 from routers.settings import load_telegram_config
 
 # Set up logging
@@ -16,6 +16,9 @@ logging.basicConfig(
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
+
+# Conversation states for manual trade entry
+SYMBOL, PRICE, ACTION, QUANTITY, CONFIRMATION = range(5)
 
 class TelegramBotService:
     def __init__(self):
@@ -40,6 +43,7 @@ You can use this Chat ID to configure the bot in your NSE Monitor settings.
 /start - Show this message and your chat ID
 /chatid - Get your chat ID
 /help - Show help information
+/trade - Manually enter a trade
 
 To set up notifications:
 1. Copy your Chat ID: `{chat_id}`
@@ -79,6 +83,7 @@ Copy this Chat ID and use it in your NSE Monitor settings to receive alerts.
 /start - Welcome message with your Chat ID
 /chatid - Get your Chat ID for configuration  
 /help - Show this help message
+/trade - Manually enter a trade (symbol, price, quantity)
 
 **Setup Instructions:**
 1. Get your bot token from @BotFather
@@ -91,6 +96,7 @@ Copy this Chat ID and use it in your NSE Monitor settings to receive alerts.
 • RSI & technical indicator notifications  
 • Gap up/down alerts
 • Custom threshold monitoring
+• Manual trade entry via /trade
 
 For support, check your NSE Monitor application.
         """
@@ -98,6 +104,217 @@ For support, check your NSE Monitor application.
         await update.message.reply_text(help_message, parse_mode='Markdown')
     
     async def message_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Handle any text message"""
+        chat_id = update.effective_chat.id
+
+        # If it's a new user or they're asking for chat ID
+        message_text = update.message.text.lower()
+
+        if any(word in message_text for word in ['chat id', 'chatid', 'id', 'setup', 'configure']):
+            await self.chatid_handler(update, context)
+        else:
+            # General response with chat ID
+            response = f"""
+Hello! Your Chat ID is: `{chat_id}`
+
+Use /help to see available commands or /chatid to get your Chat ID for NSE Monitor configuration.
+            """
+            await update.message.reply_text(response, parse_mode='Markdown')
+    
+    async def trade_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        """Handle /trade command - start manual trade entry"""
+        await update.message.reply_text(
+            "📊 **Manual Trade Entry**\n\n"
+            "Let's enter a trade manually. I'll guide you through the process.\n\n"
+            "First, enter the **stock symbol** (e.g., RELIANCE, TCS, INFY):",
+            parse_mode='Markdown'
+        )
+        return SYMBOL
+    
+    async def symbol_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        """Handle symbol input"""
+        symbol = update.message.text.upper().strip()
+        
+        # Basic validation
+        if not symbol or len(symbol) < 2 or len(symbol) > 10:
+            await update.message.reply_text(
+                "❌ Invalid symbol. Please enter a valid stock symbol (2-10 characters):"
+            )
+            return SYMBOL
+        
+        # Store symbol in context
+        context.user_data['symbol'] = symbol
+        
+        await update.message.reply_text(
+            f"✅ Symbol: **{symbol}**\n\n"
+            f"Now enter the **current price** per share (e.g., 2500.50):",
+            parse_mode='Markdown'
+        )
+        return PRICE
+    
+    async def price_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        """Handle price input"""
+        try:
+            price = float(update.message.text.strip())
+            if price <= 0 or price > 100000:
+                raise ValueError("Invalid price range")
+        except ValueError:
+            await update.message.reply_text(
+                "❌ Invalid price. Please enter a valid price (e.g., 2500.50):"
+            )
+            return PRICE
+        
+        # Store price in context
+        context.user_data['price'] = price
+        
+        # Create action selection buttons
+        keyboard = [
+            [InlineKeyboardButton("🟢 BUY", callback_data="action_buy")],
+            [InlineKeyboardButton("🔴 SELL", callback_data="action_sell")],
+            [InlineKeyboardButton("❌ Cancel", callback_data="action_cancel")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(
+            f"✅ Price: **₹{price:.2f}**\n\n"
+            f"Now select the **action** (BUY or SELL):",
+            parse_mode='Markdown',
+            reply_markup=reply_markup
+        )
+        return ACTION
+    
+    async def action_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        """Handle action selection via buttons"""
+        query = update.callback_query
+        await query.answer()
+        
+        action = query.data.split('_')[1]
+        
+        if action == 'cancel':
+            await query.edit_message_text("❌ Trade entry cancelled.")
+            return ConversationHandler.END
+        
+        # Store action in context
+        context.user_data['action'] = action
+        
+        # Check position for SELL orders
+        if action == 'sell':
+            from services.trade_journal import get_trade_journal
+            journal = get_trade_journal()
+            current_position = journal.get_current_position(context.user_data['symbol'])
+            
+            if current_position <= 0:
+                await query.edit_message_text(
+                    f"❌ **Cannot SELL {context.user_data['symbol']}**\n\n"
+                    f"🚫 **No Position Held**\n"
+                    f"Current position: {current_position} shares\n\n"
+                    f"You cannot sell a stock you don't own.\n"
+                    f"First BUY the stock to build a position.",
+                    parse_mode='Markdown'
+                )
+                return ConversationHandler.END
+        
+        await query.edit_message_text(
+            f"✅ Action: **{action.upper()}**\n\n"
+            f"Now enter the **quantity** (number of shares):",
+            parse_mode='Markdown'
+        )
+        return QUANTITY
+    
+    async def quantity_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        """Handle quantity input"""
+        try:
+            quantity = int(update.message.text.strip())
+            if quantity <= 0 or quantity > 10000:
+                raise ValueError("Invalid quantity range")
+        except ValueError:
+            await update.message.reply_text(
+                "❌ Invalid quantity. Please enter a valid number of shares (1-10000):"
+            )
+            return QUANTITY
+        
+        # Store quantity in context
+        context.user_data['quantity'] = quantity
+        
+        # Calculate total value
+        total_value = context.user_data['price'] * quantity
+        
+        # Create confirmation buttons
+        keyboard = [
+            [InlineKeyboardButton("✅ Confirm Trade", callback_data="confirm_yes")],
+            [InlineKeyboardButton("❌ Cancel", callback_data="confirm_no")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(
+            f"📋 **Trade Summary**\n\n"
+            f"📈 Symbol: **{context.user_data['symbol']}**\n"
+            f"💰 Price: **₹{context.user_data['price']:.2f}**\n"
+            f"{'🟢' if context.user_data['action'] == 'buy' else '🔴'} Action: **{context.user_data['action'].upper()}**\n"
+            f"📊 Quantity: **{quantity} shares**\n"
+            f"💵 Total Value: **₹{total_value:,.2f}**\n\n"
+            f"**Confirm this trade?**",
+            parse_mode='Markdown',
+            reply_markup=reply_markup
+        )
+        return CONFIRMATION
+    
+    async def confirmation_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        """Handle trade confirmation"""
+        query = update.callback_query
+        await query.answer()
+        
+        if query.data == 'confirm_no':
+            await query.edit_message_text("❌ Trade cancelled.")
+            return ConversationHandler.END
+        
+        # Execute the trade
+        try:
+            from services.trade_journal import log_trade
+            
+            trade_data = {
+                'symbol': context.user_data['symbol'],
+                'action': context.user_data['action'].upper(),
+                'price': context.user_data['price'],
+                'quantity': context.user_data['quantity'],
+                'confidence': 3,  # Default confidence for manual trades
+                'source': 'telegram_manual'
+            }
+            
+            success = await log_trade(trade_data)
+            
+            if success:
+                # Get updated position
+                from services.trade_journal import get_trade_journal
+                journal = get_trade_journal()
+                new_position = journal.get_current_position(context.user_data['symbol'])
+                
+                emoji = "🟢" if context.user_data['action'] == 'buy' else "🔴"
+                total_value = context.user_data['price'] * context.user_data['quantity']
+                
+                await query.edit_message_text(
+                    f"✅ **Trade Executed Successfully**\n\n"
+                    f"{emoji} **{context.user_data['action'].upper()} {context.user_data['quantity']} shares of {context.user_data['symbol']}**\n"
+                    f"💰 Price: ₹{context.user_data['price']:.2f} per share\n"
+                    f"💵 Total: ₹{total_value:,.2f}\n"
+                    f"📊 New Position: {new_position} shares\n"
+                    f"⏰ {await self._get_current_time()}\n\n"
+                    f"Trade recorded in your journal.",
+                    parse_mode='Markdown'
+                )
+            else:
+                await query.edit_message_text("❌ Failed to execute trade. Please try again.")
+                
+        except Exception as e:
+            logger.error(f"Error executing manual trade: {e}")
+            await query.edit_message_text(f"❌ Error executing trade: {str(e)}")
+        
+        return ConversationHandler.END
+    
+    async def cancel_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        """Cancel the conversation"""
+        await update.message.reply_text("❌ Trade entry cancelled.")
+        return ConversationHandler.END
         """Handle any text message"""
         chat_id = update.effective_chat.id
 
@@ -325,10 +542,25 @@ Choose quantity:
             # Create application
             self.application = Application.builder().token(bot_token).build()
             
+            # Create conversation handler for manual trade entry
+            trade_conversation = ConversationHandler(
+                entry_points=[CommandHandler("trade", self.trade_handler)],
+                states={
+                    SYMBOL: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.symbol_handler)],
+                    PRICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.price_handler)],
+                    ACTION: [CallbackQueryHandler(self.action_handler)],
+                    QUANTITY: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.quantity_handler)],
+                    CONFIRMATION: [CallbackQueryHandler(self.confirmation_handler)],
+                },
+                fallbacks=[CommandHandler("cancel", self.cancel_handler)],
+                per_message=False
+            )
+            
             # Add handlers
             self.application.add_handler(CommandHandler("start", self.start_handler))
             self.application.add_handler(CommandHandler("chatid", self.chatid_handler))
             self.application.add_handler(CommandHandler("help", self.help_handler))
+            self.application.add_handler(trade_conversation)
             self.application.add_handler(CallbackQueryHandler(self.button_handler))
             self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.message_handler))
             
