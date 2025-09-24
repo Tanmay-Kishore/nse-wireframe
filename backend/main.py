@@ -5,17 +5,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
-# Add the backend directory to Python path to handle imports
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-
 # Import routers
-try:
-    from routers import stocks, alerts, journal, settings, websocket, notifications
-    from routers import nifty, indexes
-except ImportError:
-    # If running from root directory
-    from backend.routers import stocks, alerts, journal, settings, websocket, notifications
-    from backend.routers import nifty, indexes
+from routers import stocks, alerts, journal, settings, websocket, notifications, auth
+from routers import nifty, indexes
 
 app = FastAPI(title="NSE Monitor Wireframe")
 
@@ -66,6 +58,7 @@ app.include_router(journal.router)
 app.include_router(settings.router)
 app.include_router(websocket.router)
 app.include_router(notifications.router)
+app.include_router(auth.router)
 app.include_router(nifty.router)
 app.include_router(indexes.router)
 

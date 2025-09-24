@@ -989,3 +989,82 @@ a{color:var(--text);text-decoration:none}
 .wf-index-metric-value.negative {
   color: var(--sell);
 }
+
+/* Authentication styles */
+.wf-auth {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.wf-auth.logged-out .wf-login-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wf-auth.logged-in .wf-user-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wf-auth.logged-out .wf-user-info,
+.wf-auth.logged-in .wf-login-form {
+  display: none;
+}
+
+.wf-login-form input {
+  padding: 6px 12px;
+  border: 1px solid var(--outline);
+  border-radius: 4px;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 14px;
+}
+
+.wf-login-form input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.wf-login-btn {
+  padding: 6px 16px;
+  background: var(--accent);
+  color: var(--bg);
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.wf-login-btn:hover {
+  background: #e5e7eb;
+}
+
+.wf-logout-btn {
+  padding: 6px 12px;
+  background: var(--sell);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.wf-logout-btn:hover {
+  background: #dc2626;
+}
+
+.wf-user-info {
+  color: var(--text);
+  font-size: 14px;
+}
+
+.wf-auth-status {
+  font-size: 12px;
+  color: var(--muted);
+  margin-left: 8px;
+}

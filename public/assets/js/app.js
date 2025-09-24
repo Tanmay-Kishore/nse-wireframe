@@ -1,6 +1,46 @@
 /* Simple wireframe JS to fetch mock API and render cards */
 const API_BASE = "/api";
 
+// Authentication helper functions
+const auth = {
+  // Store token
+  setToken: (token) => {
+    localStorage.setItem('jwt_token', token);
+  },
+
+  // Get token
+  getToken: () => {
+    return localStorage.getItem('jwt_token') || sessionStorage.getItem('jwt_token');
+  },
+
+  // Remove token (logout)
+  removeToken: () => {
+    localStorage.removeItem('jwt_token');
+    sessionStorage.removeItem('jwt_token');
+  },
+
+  // Check if user is authenticated
+  isAuthenticated: () => {
+    const token = auth.getToken();
+    if (!token) return false;
+
+    try {
+      // Basic check - decode payload to see if expired
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      const currentTime = Date.now() / 1000;
+      return payload.exp > currentTime;
+    } catch (e) {
+      return false;
+    }
+  }
+};
+
+// JWT token for WebSocket authentication
+const getWebSocketToken = () => {
+  // Production implementation: return auth.getToken();
+  return auth.getToken();
+};
+
 function setActiveNav() {
   const page = document.documentElement.getAttribute("data-page");
   document.querySelectorAll(".wf-nav a").forEach(a => {
@@ -340,7 +380,8 @@ function renderScreener() {
     }
 
     const badge = document.getElementById("screener-realtime-badge");
-    screenerWebSocket = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws/screener`);
+    const token = getWebSocketToken();
+    screenerWebSocket = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws/screener?token=${encodeURIComponent(token)}`);
 
     screenerWebSocket.onopen = () => {
       console.log("Screener WebSocket connected");
@@ -349,6 +390,15 @@ function renderScreener() {
 
     screenerWebSocket.onmessage = (ev) => {
       const data = JSON.parse(ev.data);
+      
+      // Handle authentication errors
+      if (data.error) {
+        console.error("Screener WebSocket authentication error:", data.error);
+        if (badge) badge.textContent = "RT: auth failed";
+        screenerWebSocket.close();
+        return;
+      }
+      
       if (data.type === "stock_update" && data.symbol && data.data) {
         // Update stored data
         stocksData[data.symbol] = data.data;
@@ -763,7 +813,8 @@ function renderStockDetail() {
     const badge = document.getElementById("realtime-badge");
     if (!badge) return; // No badge element, not on stock page
 
-    stockDetailWebSocket = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws/price?symbol=${encodeURIComponent(symbol)}`);
+    const token = getWebSocketToken();
+    stockDetailWebSocket = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws/price?symbol=${encodeURIComponent(symbol)}&token=${encodeURIComponent(token)}`);
 
     stockDetailWebSocket.onopen = () => {
       badge.textContent = "RT: live";
@@ -772,6 +823,15 @@ function renderStockDetail() {
 
     stockDetailWebSocket.onmessage = (ev) => {
       const data = JSON.parse(ev.data);
+      
+      // Handle authentication errors
+      if (data.error) {
+        console.error("Stock detail WebSocket authentication error:", data.error);
+        badge.textContent = "RT: auth failed";
+        stockDetailWebSocket.close();
+        return;
+      }
+      
       if (data.price !== undefined) {
         const el = document.getElementById("rt-price");
         if (el) el.textContent = Number(data.price).toFixed(2);
@@ -1693,3 +1753,125 @@ document.addEventListener("visibilitychange", () => {
     }
   }
 });
+
+// Authentication functionality
+function initAuth() {
+  const authSection = document.getElementById('auth-section');
+  if (!authSection) return;
+
+  // Check if user is already authenticated
+  updateAuthUI();
+
+  // Add login form HTML
+  authSection.innerHTML = `
+    <div class="wf-login-form">
+      <input type="text" id="username" placeholder="Username" class="wf-input">
+      <input type="password" id="password" placeholder="Password" class="wf-input">
+      <button id="login-btn" class="wf-login-btn">Login</button>
+    </div>
+    <div class="wf-user-info">
+      <span id="user-display">Welcome!</span>
+      <button id="logout-btn" class="wf-logout-btn">Logout</button>
+    </div>
+  `;
+
+  // Add event listeners
+  const loginBtn = document.getElementById('login-btn');
+  const logoutBtn = document.getElementById('logout-btn');
+  const usernameInput = document.getElementById('username');
+  const passwordInput = document.getElementById('password');
+
+  loginBtn.addEventListener('click', async () => {
+    const username = usernameInput.value.trim();
+    const password = passwordInput.value.trim();
+
+    if (!username || !password) {
+      alert('Please enter both username and password');
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ username, password }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        auth.setToken(data.access_token);
+        updateAuthUI();
+        usernameInput.value = '';
+        passwordInput.value = '';
+
+        // Reconnect WebSockets with new token
+        if (typeof setupScreenerWebSocket === 'function') setupScreenerWebSocket();
+        if (typeof setupPriceWebSocket === 'function') setupPriceWebSocket();
+
+        alert('Login successful!');
+      } else {
+        alert(data.detail || 'Login failed');
+      }
+    } catch (error) {
+      console.error('Login error:', error);
+      alert('Login failed. Please try again.');
+    }
+  });
+
+  logoutBtn.addEventListener('click', () => {
+    auth.removeToken();
+    updateAuthUI();
+
+    // Disconnect WebSockets
+    if (screenerWebSocket) {
+      screenerWebSocket.close();
+      screenerWebSocket = null;
+    }
+    if (priceWebSocket) {
+      priceWebSocket.close();
+      priceWebSocket = null;
+    }
+
+    alert('Logged out successfully');
+  });
+
+  // Handle Enter key in password field
+  passwordInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+      loginBtn.click();
+    }
+  });
+}
+
+function updateAuthUI() {
+  const authSection = document.getElementById('auth-section');
+  if (!authSection) return;
+
+  const isAuthenticated = auth.isAuthenticated();
+
+  if (isAuthenticated) {
+    authSection.classList.remove('logged-out');
+    authSection.classList.add('logged-in');
+
+    // Try to get user info
+    const token = auth.getToken();
+    if (token) {
+      try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        const userId = payload.user_id || 'User';
+        document.getElementById('user-display').textContent = `Welcome, ${userId}!`;
+      } catch (e) {
+        document.getElementById('user-display').textContent = 'Welcome!';
+      }
+    }
+  } else {
+    authSection.classList.remove('logged-in');
+    authSection.classList.add('logged-out');
+  }
+}
+
+// Initialize auth when DOM is loaded
+document.addEventListener('DOMContentLoaded', initAuth);
