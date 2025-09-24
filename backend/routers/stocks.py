@@ -20,6 +20,28 @@ def get_watchlist_symbols():
     except Exception:
         return []
 
+def get_all_monitored_symbols():
+    """Get all symbols from both journal and watchlist"""
+    try:
+        # Get watchlist symbols
+        watchlist_symbols = get_watchlist_symbols()
+        
+        # Get journal symbols from trades
+        from services.trade_journal import get_trade_journal
+        trade_journal = get_trade_journal()
+        raw_trades = trade_journal.get_trades(limit=1000)  # Get all trades
+        
+        # Extract unique symbols from trades
+        journal_symbols = list(set(trade.get("symbol", "") for trade in raw_trades if trade.get("symbol")))
+        
+        # Combine and deduplicate
+        all_symbols = list(set(watchlist_symbols + journal_symbols))
+        return all_symbols
+        
+    except Exception as e:
+        logger.error(f"Error getting all monitored symbols: {e}")
+        return []
+
 @router.get("/stocks")
 async def list_stocks(q: Optional[str] = None, min_gap: Optional[float] = None, min_volume: Optional[int] = None, limit: int = 20):
     """Get list of stocks with optional filters"""

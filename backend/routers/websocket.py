@@ -99,10 +99,9 @@ async def ws_screener(websocket: WebSocket, token: Optional[str] = Query(None)):
         return
     
     async with websocket_lifecycle(websocket, "/ws/screener", user_id):
-        # Get the list of stocks directly from the stocks module
-        from routers.stocks import list_stocks
-        stocks_data = await list_stocks(limit=30)
-        symbols = [stock["symbol"] for stock in stocks_data["items"]]
+        # Get all monitored symbols from journal and watchlist
+        from routers.stocks import get_all_monitored_symbols
+        symbols = get_all_monitored_symbols()
         
         # Get instrument keys for all symbols
         instrument_keys = []
@@ -185,7 +184,7 @@ async def ws_screener(websocket: WebSocket, token: Optional[str] = Query(None)):
 
 @router.websocket("/ws/price")
 async def ws_price(websocket: WebSocket, symbol: Optional[str] = Query(None), token: Optional[str] = Query(None)):
-    """WebSocket endpoint for real-time price updates"""
+    """WebSocket endpoint for real-time price updates - now subscribes to all monitored symbols"""
     await websocket.accept()
     
     # Validate JWT token
@@ -211,87 +210,85 @@ async def ws_price(websocket: WebSocket, symbol: Optional[str] = Query(None), to
         return
     
     async with websocket_lifecycle(websocket, "/ws/price", user_id):
-        current_symbol = symbol
-        current_instrument_key = None
-        price_stream_task = None
+        # Get all monitored symbols from journal and watchlist
+        from routers.stocks import get_all_monitored_symbols
+        symbols = get_all_monitored_symbols()
         
-        async def get_instrument_key(symbol):
-            try:
-                with open(instruments_path, "r") as f:
-                    instruments = json.load(f)
-                for inst in instruments:
-                    if inst.get("tradingsymbol", "").upper() == symbol.upper():
-                        return inst["instrument_key"]
-            except Exception as e:
-                logger.error(f"Error getting instrument key for symbol {symbol}: {e}")
-                # pass
-            return None
-            
-        async def price_streamer(symbol, instrument_key):
-            try:
-                logger.info(f"Subscribing to Upstox price stream for symbol {symbol}, instrument {instrument_key}")
-                async for tick in upstox_service.subscribe_price_stream([instrument_key]):      
-                    await websocket.send_json({"symbol": symbol, "price": tick.get("ltp", None), "tick": tick})
-            except WebSocketDisconnect:
-                return
-            except Exception as e:
-                await websocket.send_json({"error": str(e)})
-                await websocket.close()
-                return
-        
-        if not current_symbol:
-            logger.warning(f"No symbol provided for price WebSocket, user {user_id}")
-            await websocket.send_json({"error": "No symbol provided. Send a symbol as a query param or in a message."})
+        # Get instrument keys for all symbols
+        instrument_keys = []
+        try:
+            with open(instruments_path, "r") as f:
+                instruments = json.load(f)
+        except FileNotFoundError:
+            logger.error(f"Instruments file not found: {instruments_path}")
+            await websocket.send_json({"error": "Instrument configuration not found"})
             return
-        else:
-            try:
-                current_instrument_key = await get_instrument_key(current_symbol)
-            except Exception as e:
-                logger.error(f"Error getting instrument key for symbol {current_symbol}: {e}")
-                await websocket.send_json({"error": f"Failed to find instrument for {current_symbol}"})
-                return
-                
-            if not current_instrument_key:
-                logger.warning(f"Instrument key not found for symbol {current_symbol}, user {user_id}")
-                await websocket.send_json({"error": f"Instrument key not found for {current_symbol}"})
-                return
-            else:
-                # Start streaming price ticks immediately
-                try:
-                    async for tick in upstox_service.subscribe_price_stream([current_instrument_key]):
+        except json.JSONDecodeError as e:
+            logger.error(f"Invalid JSON in instruments file: {e}")
+            await websocket.send_json({"error": "Invalid instrument configuration"})
+            return
+        except Exception as e:
+            logger.error(f"Error reading instruments file: {e}")
+            await websocket.send_json({"error": "Failed to load instrument data"})
+            return
+            
+        symbol_to_key = {inst['tradingsymbol'].upper(): inst['instrument_key'] 
+                        for inst in instruments if 'tradingsymbol' in inst and 'instrument_key' in inst}
+        
+        for sym in symbols:
+            key = symbol_to_key.get(sym.upper())
+            if key:
+                instrument_keys.append(key)
+        
+        if not instrument_keys:
+            logger.warning(f"No instrument keys found for symbols: {symbols}")
+            await websocket.send_json({"error": "No valid instruments found for price updates"})
+            return
+            
+        # Stream ticks for all instruments
+        try:
+            async for tick in upstox_service.subscribe_price_stream(instrument_keys):
+                # Find symbol for this instrument key
+                tick_symbol = None
+                tick_instrument_key = tick.get("instrument_key")
+                for sym, key in symbol_to_key.items():
+                    if key == tick_instrument_key:
+                        tick_symbol = sym
+                        break
                         
-                        try:
-                            # Convert raw tick to quote format for processing
-                            quote_data = {
-                                "last_price": tick.get("ltp", 0),
-                                "prev_close_price": tick.get("cp", tick.get("ltp", 0)),
-                                "open_price": tick.get("open", tick.get("ltp", 0)),
-                                "volume": tick.get("vol", 0),
-                                "average_price": tick.get("atp", tick.get("ltp", 0)),
-                                "ohlc": {
-                                    "open": tick.get("open", 0),
-                                    "high": tick.get("high", 0),
-                                    "low": tick.get("low", 0),
-                                    "close": tick.get("close", tick.get("ltp", 0))
-                                }
+                if tick_symbol:
+                    try:
+                        # Convert raw tick to quote format for processing
+                        quote_data = {
+                            "last_price": tick.get("ltp", 0),
+                            "prev_close_price": tick.get("cp", tick.get("ltp", 0)),
+                            "open_price": tick.get("open", tick.get("ltp", 0)),
+                            "volume": tick.get("vol", 0),
+                            "average_price": tick.get("atp", tick.get("ltp", 0)),
+                            "ohlc": {
+                                "open": tick.get("open", 0),
+                                "high": tick.get("high", 0),
+                                "low": tick.get("low", 0),
+                                "close": tick.get("close", tick.get("ltp", 0))
                             }
-                            
-                            # Format using the existing formatter
-                            formatted_stock_data = upstox_service.format_stock_data(current_symbol, quote_data)
-                            
-                            # Send formatted data to frontend
-                            response = {
-                                "symbol": current_symbol,
-                                "price": formatted_stock_data.get("price"),
-                                "tick": formatted_stock_data
-                            }
-                            await websocket.send_json(response)
-                            
-                        except Exception as e:
-                            logger.error(f"Error processing tick data for symbol {current_symbol}: {e}")
-                            continue  # Continue streaming despite processing errors
-                            
-                except Exception as e:
-                    logger.error(f"Error in price stream for symbol {current_symbol}: {e}")
-                    await websocket.send_json({"error": "Price streaming service unavailable"})
-                    return
+                        }
+                        
+                        # Format using the existing formatter
+                        formatted_stock_data = upstox_service.format_stock_data(tick_symbol, quote_data)
+                        
+                        # Send formatted data to frontend
+                        response = {
+                            "symbol": tick_symbol,
+                            "price": formatted_stock_data.get("price"),
+                            "tick": formatted_stock_data
+                        }
+                        await websocket.send_json(response)
+                        
+                    except Exception as e:
+                        logger.error(f"Error processing tick data for symbol {tick_symbol}: {e}")
+                        continue  # Continue streaming despite processing errors
+                        
+        except Exception as e:
+            logger.error(f"Error in price stream subscription: {e}")
+            await websocket.send_json({"error": "Price streaming service unavailable"})
+            return

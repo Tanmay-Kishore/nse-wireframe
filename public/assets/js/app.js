@@ -371,6 +371,7 @@ function renderScreener() {
   // Global WebSocket references for cleanup
   let screenerWebSocket = null;
   let stockDetailWebSocket = null;
+  let journalWebSocket = null;
 
   function setupScreenerWebSocket() {
     // Close existing WebSocket if any
@@ -689,6 +690,71 @@ async function setupWatchlistButton(symbol) {
   }
 }
 
+function setupJournalWebSocket() {
+  // Close existing WebSocket if any
+  if (journalWebSocket) {
+    journalWebSocket.close();
+    journalWebSocket = null;
+  }
+
+  const token = getWebSocketToken();
+  journalWebSocket = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws/price?token=${encodeURIComponent(token)}`);
+
+  journalWebSocket.onopen = () => {
+    console.log("Journal WebSocket connected");
+  };
+
+  journalWebSocket.onmessage = (ev) => {
+    const data = JSON.parse(ev.data);
+    
+    // Handle authentication errors
+    if (data.error) {
+      console.error("Journal WebSocket authentication error:", data.error);
+      journalWebSocket.close();
+      return;
+    }
+    
+    // Update journal table with real-time price updates
+    updateJournalPrice(data.symbol, data.price, data.tick);
+  };
+
+  journalWebSocket.onclose = () => {
+    console.log("Journal WebSocket disconnected");
+  };
+
+  journalWebSocket.onerror = (error) => {
+    console.error("Journal WebSocket error:", error);
+  };
+}
+
+function cleanupJournalWebSocket() {
+  if (journalWebSocket) {
+    journalWebSocket.close();
+    journalWebSocket = null;
+  }
+}
+
+function updateJournalPrice(symbol, price, tick) {
+  // Find and update the row for this symbol in the journal table
+  const rows = document.querySelectorAll("#journal-table tbody tr");
+  rows.forEach(row => {
+    const symbolCell = row.cells[1]; // Symbol is in column index 1
+    if (symbolCell && symbolCell.textContent === symbol) {
+      // Update current price cell (column index 5)
+      const priceCell = row.cells[5];
+      if (priceCell && price) {
+        // Preserve the status class (profit/loss)
+        const statusClass = priceCell.className;
+        priceCell.textContent = `₹${Number(price).toFixed(2)}`;
+        priceCell.className = statusClass;
+      }
+      
+      // If we have tick data, we could recalculate P&L here
+      // For now, just update the price - P&L recalculation would require more complex logic
+    }
+  });
+}
+
 function renderStockDetail() {
   const params = new URLSearchParams(location.search);
   const symbol = params.get("symbol") || "RELIANCE";
@@ -814,7 +880,8 @@ function renderStockDetail() {
     if (!badge) return; // No badge element, not on stock page
 
     const token = getWebSocketToken();
-    stockDetailWebSocket = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws/price?symbol=${encodeURIComponent(symbol)}&token=${encodeURIComponent(token)}`);
+    // Remove symbol parameter since /ws/price now subscribes to all symbols
+    stockDetailWebSocket = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws/price?token=${encodeURIComponent(token)}`);
 
     stockDetailWebSocket.onopen = () => {
       badge.textContent = "RT: live";
@@ -830,6 +897,11 @@ function renderStockDetail() {
         badge.textContent = "RT: auth failed";
         stockDetailWebSocket.close();
         return;
+      }
+      
+      // Filter messages to only process updates for the current symbol
+      if (data.symbol !== symbol) {
+        return; // Ignore updates for other symbols
       }
       
       if (data.price !== undefined) {
@@ -1116,6 +1188,9 @@ function renderJournal() {
         <td class="${statusClass}">${displayPnLPercent > 0 ? '+' : ''}${displayPnLPercent.toFixed(2)}%</td>
       </tr>`;
     }).join("");
+    
+    // Setup WebSocket for real-time updates
+    setupJournalWebSocket();
   });
 }
 
@@ -1721,6 +1796,9 @@ window.addEventListener("beforeunload", () => {
   if (typeof cleanupStockWebSocket === 'function') {
     cleanupStockWebSocket();
   }
+  if (typeof cleanupJournalWebSocket === 'function') {
+    cleanupJournalWebSocket();
+  }
 });
 
 // Cleanup when navigating between pages (for SPAs or when links are clicked)
@@ -1734,6 +1812,9 @@ document.addEventListener("click", (event) => {
     }
     if (typeof cleanupStockWebSocket === 'function') {
       cleanupStockWebSocket();
+    }
+    if (typeof cleanupJournalWebSocket === 'function') {
+      cleanupJournalWebSocket();
     }
   }
 });
