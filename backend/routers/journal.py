@@ -292,6 +292,44 @@ async def close_trade(trade_id: str, exit_price: float, notes: str = ""):
         logger.error(f"Error closing trade: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.post("/journal/close-symbol/{symbol}")
+async def close_all_trades_for_symbol(symbol: str, exit_price: float, notes: str = ""):
+    """Close all open trades for a specific symbol"""
+    try:
+        symbol = symbol.upper()
+        closed_trades = []
+        
+        # Get all open trades for this symbol
+        open_trades = trade_journal.get_open_trades()
+        symbol_trades = [t for t in open_trades if t.get('symbol') == symbol]
+        
+        if not symbol_trades:
+            raise HTTPException(status_code=404, detail=f"No open trades found for {symbol}")
+        
+        # Close each trade
+        for trade in symbol_trades:
+            trade_id = trade['trade_id']
+            success = trade_journal.close_trade(trade_id, exit_price, notes)
+            if success:
+                closed_trades.append(trade_id)
+            else:
+                logger.warning(f"Failed to close trade {trade_id} for {symbol}")
+        
+        if closed_trades:
+            return {
+                "success": True,
+                "message": f"Closed {len(closed_trades)} trades for {symbol} at ₹{exit_price}",
+                "closed_trades": closed_trades
+            }
+        else:
+            raise HTTPException(status_code=500, detail=f"Failed to close any trades for {symbol}")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error closing trades for {symbol}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.get("/journal/stats")
 async def get_portfolio_stats():
     """Get portfolio performance statistics"""

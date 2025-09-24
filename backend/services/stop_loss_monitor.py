@@ -23,53 +23,69 @@ class StopLossMonitorService:
     async def check_stop_losses(self) -> List[Dict]:
         """Check all open positions for stop-loss hits"""
         try:
-            open_trades = self.journal.get_open_trades()
-            if not open_trades:
+            # Get consolidated positions instead of individual trades
+            all_positions = self.journal.get_all_positions()
+            
+            # Only monitor symbols with non-zero net positions
+            symbols_with_positions = [symbol for symbol, qty in all_positions.items() if qty != 0]
+            
+            if not symbols_with_positions:
                 return []
 
-            # Get current market prices for all open positions
-            symbols = list(set(trade['symbol'] for trade in open_trades))
-            current_prices = await self._get_current_prices(symbols)
+            # Get current market prices for symbols with open positions
+            current_prices = await self._get_current_prices(symbols_with_positions)
 
             stop_loss_hits = []
 
-            for trade in open_trades:
-                symbol = trade['symbol']
-                action = trade['action']
-                entry_price = trade['entry_price']
-                sl_price = trade['sl']
+            # Check each symbol's net position
+            for symbol in symbols_with_positions:
+                net_quantity = all_positions[symbol]
                 current_price = current_prices.get(symbol, 0)
 
                 if current_price == 0:
                     continue  # Skip if no current price available
 
-                # Check if stop-loss is hit
-                sl_hit = False
-
-                if action == 'BUY':
-                    # For BUY positions, SL is hit when current price <= stop-loss
-                    sl_hit = current_price <= sl_price
-                elif action == 'SELL':
-                    # For SELL positions, SL is hit when current price >= stop-loss
-                    sl_hit = current_price >= sl_price
-
-                if sl_hit:
-                    # Calculate loss
-                    if action == 'BUY':
-                        loss_amount = (entry_price - current_price) * trade['quantity']
-                        loss_pct = ((entry_price - current_price) / entry_price) * 100
-                    else:
-                        loss_amount = (current_price - entry_price) * trade['quantity']
-                        loss_pct = ((current_price - entry_price) / entry_price) * 100
-
-                    stop_loss_hits.append({
-                        'trade': trade,
-                        'current_price': current_price,
-                        'sl_price': sl_price,
-                        'loss_amount': round(loss_amount, 2),
-                        'loss_pct': round(loss_pct, 2),
-                        'urgency': 'HIGH' if abs(loss_pct) > 5 else 'MEDIUM'
-                    })
+                # Get all open trades for this symbol to check stop losses
+                open_trades = self.journal.get_open_trades()
+                symbol_trades = [t for t in open_trades if t['symbol'] == symbol]
+                
+                # Find the most recent trade for this symbol (for SL reference)
+                if symbol_trades:
+                    # Sort by entry time, most recent first
+                    recent_trade = max(symbol_trades, key=lambda x: x.get('entry_time', ''))
+                    
+                    action = recent_trade['action']
+                    entry_price = recent_trade['entry_price']
+                    sl_price = recent_trade['sl']
+                    
+                    # Check if stop-loss is hit based on position direction
+                    sl_hit = False
+                    
+                    if net_quantity > 0:  # Net long position
+                        # For long positions, SL is hit when current price <= stop-loss
+                        sl_hit = current_price <= sl_price
+                        if sl_hit:
+                            loss_amount = (entry_price - current_price) * abs(net_quantity)
+                            loss_pct = ((entry_price - current_price) / entry_price) * 100
+                    elif net_quantity < 0:  # Net short position
+                        # For short positions, SL is hit when current price >= stop-loss
+                        sl_hit = current_price >= sl_price
+                        if sl_hit:
+                            loss_amount = (current_price - entry_price) * abs(net_quantity)
+                            loss_pct = ((current_price - entry_price) / entry_price) * 100
+                    
+                    if sl_hit:
+                        stop_loss_hits.append({
+                            'symbol': symbol,
+                            'net_quantity': net_quantity,
+                            'current_price': current_price,
+                            'sl_price': sl_price,
+                            'entry_price': entry_price,
+                            'loss_amount': round(loss_amount, 2),
+                            'loss_pct': round(loss_pct, 2),
+                            'urgency': 'HIGH' if abs(loss_pct) > 5 else 'MEDIUM',
+                            'trades': symbol_trades  # Include all related trades for reference
+                        })
 
             return stop_loss_hits
 
@@ -128,34 +144,38 @@ class StopLossMonitorService:
 
         try:
             for sl_hit in stop_loss_hits:
-                trade = sl_hit['trade']
-                symbol = trade['symbol']
-                action = trade['action']
+                symbol = sl_hit['symbol']
+                net_quantity = sl_hit['net_quantity']
                 current_price = sl_hit['current_price']
                 sl_price = sl_hit['sl_price']
+                entry_price = sl_hit['entry_price']
                 loss_amount = sl_hit['loss_amount']
                 loss_pct = sl_hit['loss_pct']
                 urgency = sl_hit['urgency']
+                trades = sl_hit.get('trades', [])
+
+                # Determine position type from net quantity
+                position_type = "LONG" if net_quantity > 0 else "SHORT"
+                action_emoji = "�" if net_quantity > 0 else "🔴"
 
                 # Create urgency emoji
-                urgency_emoji = "🚨" if urgency == 'HIGH' else "⚠️"
-                action_emoji = "🟢" if action == 'BUY' else "🔴"
+                urgency_emoji = "�" if urgency == 'HIGH' else "⚠️"
 
                 # Format stop-loss alert message
                 message = f"""
 {urgency_emoji} **STOP-LOSS HIT!**
 
-{action_emoji} **{symbol}** ({action} Position)
-💰 Entry: ₹{trade['entry_price']} per share
-🛑 Stop-Loss: ₹{sl_price}
-📉 Current: ₹{current_price}
+{action_emoji} **{symbol}** ({position_type} Position)
+💰 Avg Entry: ₹{entry_price:.2f} per share
+🛑 Stop-Loss: ₹{sl_price:.2f}
+📉 Current: ₹{current_price:.2f}
 
 📊 **Loss Details:**
 💸 Loss: ₹{abs(loss_amount):,.2f} ({abs(loss_pct):.1f}%)
-📦 Quantity: {trade['quantity']} shares
+📦 Net Quantity: {abs(net_quantity)} shares
 
 🔥 **URGENT ACTION REQUIRED**
-Consider selling immediately to limit losses!
+Consider closing position immediately to limit losses!
 
 ⏰ {datetime.now().strftime('%H:%M:%S')}
                 """
@@ -163,10 +183,14 @@ Consider selling immediately to limit losses!
                 # Create sell button for the position
                 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
+                # Determine action based on position type
+                action_text = "SELL" if net_quantity > 0 else "BUY BACK"
+                action_emoji_btn = "🔴" if net_quantity > 0 else "🟢"
+
                 sell_buttons = [
                     [InlineKeyboardButton(
-                        f"🔴 SELL ALL {symbol} ({trade['quantity']} shares)",
-                        callback_data=f"qty_sell_{symbol}_{current_price}_{trade['quantity']}"
+                        f"{action_emoji_btn} {action_text} ALL {symbol} ({abs(net_quantity)} shares)",
+                        callback_data=f"qty_sell_{symbol}_{current_price}_{abs(net_quantity)}"
                     )],
                     [InlineKeyboardButton(
                         "⏰ Remind in 5 min",
