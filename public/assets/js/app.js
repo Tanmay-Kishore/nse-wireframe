@@ -350,7 +350,9 @@ function renderOverview() {
 }
 
 function renderScreener() {
+  console.log("renderScreener called");
   const out = document.getElementById("screener-results");
+  console.log("screener-results element found:", out);
   let stocksData = {};
 
   function run() {
@@ -369,27 +371,28 @@ function renderScreener() {
   }
 
   // Global WebSocket references for cleanup
-  let screenerWebSocket = null;
-  let stockDetailWebSocket = null;
-  let journalWebSocket = null;
+  window.screenerWebSocket = null;
+  window.stockDetailWebSocket = null;
+  window.journalWebSocket = null;
 
   function setupScreenerWebSocket() {
     // Close existing WebSocket if any
-    if (screenerWebSocket) {
-      screenerWebSocket.close();
-      screenerWebSocket = null;
+    if (window.screenerWebSocket) {
+      window.screenerWebSocket.close();
+      window.screenerWebSocket = null;
     }
 
     const badge = document.getElementById("screener-realtime-badge");
-    screenerWebSocket = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws/screener`);
+    window.screenerWebSocket = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws/screener`);
 
-    screenerWebSocket.onopen = () => {
+    window.screenerWebSocket.onopen = () => {
       console.log("Screener WebSocket connected");
       if (badge) badge.textContent = "RT: live";
     };
 
-    screenerWebSocket.onmessage = (ev) => {
+    window.screenerWebSocket.onmessage = (ev) => {
       const data = JSON.parse(ev.data);
+      console.log("Screener WebSocket message received:", data);
       
       // Handle authentication errors
       if (data.error) {
@@ -400,6 +403,7 @@ function renderScreener() {
       }
       
       if (data.type === "stock_update" && data.symbol && data.data) {
+        console.log("Processing screener update for", data.symbol, "price:", data.data.price);
         // Update stored data
         stocksData[data.symbol] = data.data;
 
@@ -408,20 +412,20 @@ function renderScreener() {
       }
     };
 
-    screenerWebSocket.onclose = () => {
+    window.screenerWebSocket.onclose = () => {
       console.log("Screener WebSocket disconnected");
       if (badge) badge.textContent = "RT: disconnected";
 
       // Only attempt to reconnect if still on screener page
       setTimeout(() => {
-        if (document.documentElement.getAttribute("data-page") === "screener" && screenerWebSocket && screenerWebSocket.readyState === WebSocket.CLOSED) {
+        if (document.documentElement.getAttribute("data-page") === "screener" && window.screenerWebSocket && window.screenerWebSocket.readyState === WebSocket.CLOSED) {
           if (badge) badge.textContent = "RT: reconnecting";
           setupScreenerWebSocket();
         }
       }, 3000);
     };
 
-    screenerWebSocket.onerror = (error) => {
+    window.screenerWebSocket.onerror = (error) => {
       console.error("Screener WebSocket error:", error);
       if (badge) badge.textContent = "RT: error";
     };
@@ -439,11 +443,14 @@ function renderScreener() {
   }
 
   function updateStockCard(symbol, stockData) {
+    console.log("updateStockCard called for", symbol, "with price:", stockData.price);
     // Find the existing card by looking for the symbol in the stock cards
-    const cards = out.querySelectorAll('.wf-stock-card');
+    const cards = out.querySelectorAll('.wf-screener-card');
+    console.log("Found", cards.length, "screener cards");
     for (let card of cards) {
-      const symbolElement = card.querySelector('strong');
+      const symbolElement = card.querySelector('.wf-mover-symbol');
       if (symbolElement && symbolElement.textContent === symbol) {
+        console.log("Found matching card for", symbol, "- updating");
         // Replace the entire card with updated data
         const newCardHTML = stockCard(stockData);
         card.outerHTML = newCardHTML;
@@ -754,204 +761,279 @@ function updateJournalPrice(symbol, price, tick) {
 }
 
 function renderStockDetail() {
+  console.log("renderStockDetail called");
   const params = new URLSearchParams(location.search);
   const symbol = params.get("symbol") || "RELIANCE";
+  console.log("Symbol from URL:", symbol);
 
   // Setup candlestick chart
   setupCandlestickChart(symbol);
   
-  getJSON(`/stocks/${encodeURIComponent(symbol)}`).then(s => {
-    console.log("Stock data received:", s); // Debug log
-    console.log("Stock data received:", s); // Debug log
-    console.log("Stock data received:", s); // Debug log
-    
-    // Helper function to safely format numbers
-    const formatNumber = (value, decimals = 2) => {
-      if (value == null || value === undefined || isNaN(value)) return "-";
-      return Number(value).toFixed(decimals);
-    };
-    
-    const formatVolume = (volume) => {
-      if (!volume || volume === 0) return "-";
-      return Number(volume).toLocaleString();
-    };
-    
-    const k = document.getElementById("stock-detail-content");
-    k.innerHTML = `
-      <div class="wf-stock-header">
-        <div class="wf-stock-title-section">
-          <div class="wf-stock-symbol-large ${s.signal?.direction === "BUY" ? "buy-signal" : s.signal?.direction === "SELL" ? "sell-signal" : ""}">${s.symbol}</div>
-          ${s.name ? `<div class="wf-stock-name ${s.signal?.direction === "BUY" ? "buy-signal" : s.signal?.direction === "SELL" ? "sell-signal" : ""}">${s.name}</div>` : ''}
-          <div class="wf-stock-price-large ${s.sentiment === 'BULLISH' ? 'buy-signal' : s.sentiment === 'BEARISH' ? 'sell-signal' : ''}">₹${formatNumber(s.price, 2)}</div>
-          <div class="wf-stock-change ${s.gap > 0 ? 'positive' : s.gap < 0 ? 'negative' : ''}">${formatNumber(s.gap, 2)}%</div>
-        </div>
-        <div class="wf-stock-actions">
-          <button id="watchlist-btn" class="wf-btn" style="font-size:12px;">${s.watchlist ? 'Remove from Watchlist' : 'Add to Watchlist'}</button>
-          <span id="realtime-badge" class="wf-tag">RT: live</span>
-        </div>
-      </div>
-      
-      <div class="wf-stock-metrics-grid">
-        <div class="wf-metric-group">
-          <div class="wf-metric-card">
-            <div class="wf-metric-label">Volume</div>
-            <div class="wf-metric-value">${formatVolume(s.volume)}</div>
-          </div>
-          <div class="wf-metric-card">
-            <div class="wf-metric-label">VWAP</div>
-            <div class="wf-metric-value">₹${formatNumber(s.vwap, 2)}</div>
-          </div>
-        </div>
-        
-        <div class="wf-metric-group">
-          <div class="wf-metric-card">
-            <div class="wf-metric-label">RSI</div>
-            <div class="wf-metric-value">${formatNumber(s.rsi, 1)}</div>
-          </div>
-          <div class="wf-metric-card">
-            <div class="wf-metric-label">Bollinger Bands</div>
-            <div class="wf-metric-value">${formatNumber(s.bb_upper, 0)} / ${formatNumber(s.bb_lower, 0)}</div>
-          </div>
-        </div>
-        
-        <div class="wf-metric-group wf-metric-full">
-          <div class="wf-metric-card">
-            <div class="wf-metric-label">Moving Averages (20/50/200)</div>
-            <div class="wf-metric-value">${formatNumber(s.ma20, 0)} / ${formatNumber(s.ma50, 0)} / ${formatNumber(s.ma200, 0)}</div>
-          </div>
-        </div>
-        
-        <div class="wf-metric-group">
-          ${s.sentiment === 'BULLISH' || s.sentiment === 'BEARISH' ? `
-          <div class="wf-metric-card">
-            <div class="wf-metric-label">Entry Price</div>
-            <div class="wf-metric-value">₹${formatNumber(s.signal?.entry, 2)}</div>
-          </div>
-          <div class="wf-metric-card">
-            <div class="wf-metric-label">Stop Loss</div>
-            <div class="wf-metric-value">₹${formatNumber(s.signal?.sl, 2)}</div>
-          </div>
-          <div class="wf-metric-card">
-            <div class="wf-metric-label">Target</div>
-            <div class="wf-metric-value">₹${formatNumber(s.signal?.target, 2)}</div>
-          </div>
-          ` : ''}
-          <div class="wf-metric-card">
-            <div class="wf-metric-label">Sentiment</div>
-            <div class="wf-metric-value ${s.sentiment === 'BULLISH' ? 'buy-signal' : s.sentiment === 'BEARISH' ? 'sell-signal' : ''}">${s.sentiment || "NEUTRAL"}</div>
-          </div>
-        </div>
-      </div>
-      
-      <div class="wf-stock-note">
-        <div class="wf-note">Signals (wireframe): Entry / SL / Target are placeholders for demonstration.</div>
-      </div>
-    `;
-    
-    // Setup watchlist button after HTML is rendered
-    setupWatchlistButton(symbol);
-    
-    // Alerts list - handle missing alerts gracefully
-    const al = document.getElementById("stock-alerts");
-    if (al && s.alerts && Array.isArray(s.alerts)) {
-      al.innerHTML = s.alerts.map(a => `<li class="wf-alert ${a.severity}"><div>${a.message}</div><div class="wf-tag">${new Date(a.ts).toLocaleTimeString()}</div></li>`).join("");
-    } else if (al) {
-      al.innerHTML = "<li>No alerts yet</li>";
-    }
-  }).catch(error => {
-    console.error("Error loading stock data:", error);
-    const k = document.getElementById("stock-detail-content");
-    if (k) {
-      k.innerHTML = `<div class="wf-metric-card"><div class="wf-metric-label">Error</div><div class="wf-metric-value">Failed to load stock data</div></div>`;
-    }
-  });
+  // Use WebSocket for real-time stock data instead of HTTP
+  setupStockDataWebSocket(symbol);
+}
 
-  // WebSocket setup for stock detail page
-  function setupStockWebSocket() {
-    // Close existing WebSocket if any
-    if (stockDetailWebSocket) {
-      stockDetailWebSocket.close();
-      stockDetailWebSocket = null;
-    }
+// WebSocket cleanup for stock detail page
+function cleanupStockWebSocket() {
+  if (stockDetailWebSocket) {
+    console.log("Cleaning up stock detail WebSocket");
+    stockDetailWebSocket.close();
+    stockDetailWebSocket = null;
 
     const badge = document.getElementById("realtime-badge");
-    if (!badge) return; // No badge element, not on stock page
-    
-    // Remove symbol parameter since /ws/price now subscribes to all symbols
-    stockDetailWebSocket = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws/price`);
+    if (badge) badge.textContent = "RT: disconnected";
+  }
+  
+  // Also cleanup the stock data WebSocket
+  if (window.stockDataWebSocket) {
+    console.log("Cleaning up stock data WebSocket");
+    window.stockDataWebSocket.close();
+    window.stockDataWebSocket = null;
+  }
+}
 
-    stockDetailWebSocket.onopen = () => {
-      badge.textContent = "RT: live";
-      console.log("Stock detail WebSocket connected for", symbol);
-    };
+// WebSocket setup for individual stock data
+function setupStockDataWebSocket(symbol) {
+  console.log("setupStockDataWebSocket called for symbol:", symbol);
 
-    stockDetailWebSocket.onmessage = (ev) => {
-      const data = JSON.parse(ev.data);
-      
-      // Handle authentication errors
-      if (data.error) {
-        console.error("Stock detail WebSocket authentication error:", data.error);
-        badge.textContent = "RT: auth failed";
-        stockDetailWebSocket.close();
-        return;
-      }
-      
-      // Filter messages to only process updates for the current symbol
-      if (data.symbol !== symbol) {
-        return; // Ignore updates for other symbols
-      }
-      
-      if (data.price !== undefined) {
-        const el = document.getElementById("rt-price");
-        if (el) el.textContent = Number(data.price).toFixed(2);
-      }
-      if (data.tick) {
-        if (data.tick.gap !== undefined) {
-          const gapEl = document.getElementById("rt-gap");
-          if (gapEl) gapEl.textContent = Number(data.tick.gap).toFixed(2) + "%";
-        }
-        if (data.tick.volume !== undefined) {
-          const volEl = document.getElementById("rt-volume");
-          if (volEl) volEl.textContent = data.tick.volume;
-        }
-        if (data.tick.vwap !== undefined) {
-          const vwapEl = document.getElementById("rt-vwap");
-          if (vwapEl) vwapEl.textContent = Number(data.tick.vwap).toFixed(2);
-        }
-        if (data.tick.rsi !== undefined) {
-          const rsiEl = document.getElementById("rt-rsi");
-          if (rsiEl) rsiEl.textContent = Number(data.tick.rsi).toFixed(1);
-        }
-        if (data.tick.ma20 !== undefined && data.tick.ma50 !== undefined && data.tick.ma200 !== undefined) {
-          const maEl = document.getElementById("rt-ma");
-          if (maEl) maEl.textContent = `${Number(data.tick.ma20).toFixed(2)} / ${Number(data.tick.ma50).toFixed(2)} / ${Number(data.tick.ma200).toFixed(2)}`;
-        }
-      }
-    };
-
-    stockDetailWebSocket.onclose = () => {
-      badge.textContent = "RT: disconnected";
-      console.log("Stock detail WebSocket disconnected");
-    };
-
-    stockDetailWebSocket.onerror = (error) => {
-      console.error("Stock detail WebSocket error:", error);
-      badge.textContent = "RT: error";
-    };
+  // Close existing WebSocket if any
+  if (window.stockDataWebSocket) {
+    window.stockDataWebSocket.close();
+    window.stockDataWebSocket = null;
   }
 
-  function cleanupStockWebSocket() {
-    if (stockDetailWebSocket) {
-      console.log("Cleaning up stock detail WebSocket");
-      stockDetailWebSocket.close();
-      stockDetailWebSocket = null;
+  const badge = document.getElementById("realtime-badge");
+  if (badge) badge.textContent = "RT: connecting...";
 
-      const badge = document.getElementById("realtime-badge");
-      if (badge) badge.textContent = "RT: disconnected";
+  // Connect to the new WebSocket endpoint for this specific stock
+  window.stockDataWebSocket = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/stocks/${symbol}`);
+  console.log("WebSocket URL:", `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/stocks/${symbol}`);
+
+  window.stockDataWebSocket.onopen = () => {
+    console.log("WebSocket opened successfully");
+    if (badge) badge.textContent = "RT: live";
+    console.log("Stock data WebSocket connected for", symbol);
+  };
+
+  window.stockDataWebSocket.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      console.log("WebSocket message received:", data);
+
+      // Handle initial data load
+      if (data.type === 'initial') {
+        console.log("Rendering initial stock data");
+        renderStockData(data.stock);
+      }
+      // Handle real-time updates
+      else if (data.type === 'update') {
+        console.log("Processing update:", data.updates);
+        updateStockData(data.updates);
+      }
+    } catch (error) {
+      console.error("Error parsing stock data WebSocket message:", error);
+    }
+  };
+
+  window.stockDataWebSocket.onclose = () => {
+    if (badge) badge.textContent = "RT: disconnected";
+    console.log("Stock data WebSocket disconnected for", symbol);
+  };
+
+  window.stockDataWebSocket.onerror = (error) => {
+    console.error("Stock data WebSocket error for", symbol, error);
+    if (badge) badge.textContent = "RT: error";
+  };
+}
+
+// Render initial stock data
+function renderStockData(stock) {
+  // Helper function to safely format numbers
+  const formatNumber = (value, decimals = 2) => {
+    if (value == null || value === undefined || isNaN(value)) return "-";
+    return Number(value).toFixed(decimals);
+  };
+  
+  const formatVolume = (volume) => {
+    if (!volume || volume === 0) return "-";
+    return Number(volume).toLocaleString();
+  };
+  
+  const k = document.getElementById("stock-detail-content");
+  k.innerHTML = `
+    <div class="wf-stock-header">
+      <div class="wf-stock-title-section">
+        <div class="wf-stock-symbol-large ${stock.signal?.direction === "BUY" ? "buy-signal" : stock.signal?.direction === "SELL" ? "sell-signal" : ""}">${stock.symbol}</div>
+        ${stock.name ? `<div class="wf-stock-name ${stock.signal?.direction === "BUY" ? "buy-signal" : stock.signal?.direction === "SELL" ? "sell-signal" : ""}">${stock.name}</div>` : ''}
+        <div class="wf-stock-price-large ${stock.sentiment === 'BULLISH' ? 'buy-signal' : stock.sentiment === 'BEARISH' ? 'sell-signal' : ''}">₹${formatNumber(stock.price, 2)}</div>
+        <div class="wf-stock-change ${stock.gap > 0 ? 'positive' : stock.gap < 0 ? 'negative' : ''}">${formatNumber(stock.gap, 2)}%</div>
+      </div>
+      <div class="wf-stock-actions">
+        <button id="watchlist-btn" class="wf-btn" style="font-size:12px;">${stock.watchlist ? 'Remove from Watchlist' : 'Add to Watchlist'}</button>
+        <span id="realtime-badge" class="wf-tag">RT: live</span>
+      </div>
+    </div>
+    
+    <div class="wf-stock-metrics-grid">
+      <div class="wf-metric-group">
+        <div class="wf-metric-card">
+          <div class="wf-metric-label">Volume</div>
+          <div class="wf-metric-value">${formatVolume(stock.volume)}</div>
+        </div>
+        <div class="wf-metric-card">
+          <div class="wf-metric-label">VWAP</div>
+          <div class="wf-metric-value">₹${formatNumber(stock.vwap, 2)}</div>
+        </div>
+      </div>
+      
+      <div class="wf-metric-group">
+        <div class="wf-metric-card">
+          <div class="wf-metric-label">RSI</div>
+          <div class="wf-metric-value">${formatNumber(stock.rsi, 1)}</div>
+        </div>
+        <div class="wf-metric-card">
+          <div class="wf-metric-label">Bollinger Bands</div>
+          <div class="wf-metric-value">${formatNumber(stock.bb_upper, 0)} / ${formatNumber(stock.bb_lower, 0)}</div>
+        </div>
+      </div>
+      
+      <div class="wf-metric-group wf-metric-full">
+        <div class="wf-metric-card">
+          <div class="wf-metric-label">Moving Averages (20/50/200)</div>
+          <div class="wf-metric-value">${formatNumber(stock.ma20, 0)} / ${formatNumber(stock.ma50, 0)} / ${formatNumber(stock.ma200, 0)}</div>
+        </div>
+      </div>
+      
+      <div class="wf-metric-group">
+        ${stock.sentiment === 'BULLISH' || stock.sentiment === 'BEARISH' ? `
+        <div class="wf-metric-card">
+          <div class="wf-metric-label">Entry Price</div>
+          <div class="wf-metric-value">₹${formatNumber(stock.signal?.entry, 2)}</div>
+        </div>
+        <div class="wf-metric-card">
+          <div class="wf-metric-label">Stop Loss</div>
+          <div class="wf-metric-value">₹${formatNumber(stock.signal?.sl, 2)}</div>
+        </div>
+        <div class="wf-metric-card">
+          <div class="wf-metric-label">Target</div>
+          <div class="wf-metric-value">₹${formatNumber(stock.signal?.target, 2)}</div>
+        </div>
+        ` : ''}
+        <div class="wf-metric-card">
+          <div class="wf-metric-label">Sentiment</div>
+          <div class="wf-metric-value ${stock.sentiment === 'BULLISH' ? 'buy-signal' : stock.sentiment === 'BEARISH' ? 'sell-signal' : ''}">${stock.sentiment || "NEUTRAL"}</div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="wf-stock-note">
+      <div class="wf-note">Signals (wireframe): Entry / SL / Target are placeholders for demonstration.</div>
+    </div>
+  `;
+  
+  // Setup watchlist button after HTML is rendered
+  setupWatchlistButton(symbol);
+  
+  // Alerts list - handle missing alerts gracefully
+  const al = document.getElementById("stock-alerts");
+  if (al && stock.alerts && Array.isArray(stock.alerts)) {
+    al.innerHTML = stock.alerts.map(a => `<li class="wf-alert ${a.severity}"><div>${a.message}</div><div class="wf-tag">${new Date(a.ts).toLocaleTimeString()}</div></li>`).join("");
+  } else if (al) {
+    al.innerHTML = "<li>No alerts yet</li>";
+  }
+}
+
+// Update stock data in real-time
+function updateStockData(updates) {
+  console.log("updateStockData called with:", updates);
+
+  // Check if stock data has been rendered first
+  const stockContent = document.getElementById("stock-detail-content");
+  if (!stockContent || stockContent.querySelector(".wf-skel")) {
+    console.log("Stock data not rendered yet, skipping update");
+    return;
+  }
+
+  console.log("DOM content:", stockContent.innerHTML.substring(0, 200) + "...");
+
+  // Update price if provided
+  if (updates.price !== undefined) {
+    const priceEls = document.querySelectorAll(".wf-stock-price-large");
+    console.log("Price elements found:", priceEls.length);
+    if (priceEls.length > 0) {
+      const priceEl = priceEls[0]; // Take the first one
+      console.log("Updating price element:", priceEl);
+      priceEl.textContent = `₹${Number(updates.price).toFixed(2)}`;
+      console.log("Price updated to:", priceEl.textContent);
+    } else {
+      console.log("No price elements found with selector .wf-stock-price-large");
     }
   }
-
-  setupStockWebSocket();
+  
+  // Update gap if provided
+  if (updates.gap !== undefined) {
+    const gapEl = document.querySelector(".wf-stock-change");
+    if (gapEl) {
+      gapEl.textContent = `${Number(updates.gap).toFixed(2)}%`;
+      gapEl.className = `wf-stock-change ${updates.gap > 0 ? 'positive' : updates.gap < 0 ? 'negative' : ''}`;
+    }
+  }
+  
+  // Update volume if provided
+  if (updates.volume !== undefined) {
+    const volEl = document.querySelector(".wf-metric-value");
+    const volLabels = document.querySelectorAll(".wf-metric-label");
+    volLabels.forEach((label, index) => {
+      if (label.textContent === "Volume") {
+        const valueEl = label.nextElementSibling;
+        if (valueEl) valueEl.textContent = Number(updates.volume).toLocaleString();
+      }
+    });
+  }
+  
+  // Update VWAP if provided
+  if (updates.vwap !== undefined) {
+    const vwapLabels = document.querySelectorAll(".wf-metric-label");
+    vwapLabels.forEach((label, index) => {
+      if (label.textContent === "VWAP") {
+        const valueEl = label.nextElementSibling;
+        if (valueEl) valueEl.textContent = `₹${Number(updates.vwap).toFixed(2)}`;
+      }
+    });
+  }
+  
+  // Update RSI if provided
+  if (updates.rsi !== undefined) {
+    const rsiLabels = document.querySelectorAll(".wf-metric-label");
+    rsiLabels.forEach((label, index) => {
+      if (label.textContent === "RSI") {
+        const valueEl = label.nextElementSibling;
+        if (valueEl) valueEl.textContent = Number(updates.rsi).toFixed(1);
+      }
+    });
+  }
+  
+  // Update moving averages if provided
+  if (updates.ma20 !== undefined && updates.ma50 !== undefined && updates.ma200 !== undefined) {
+    const maLabels = document.querySelectorAll(".wf-metric-label");
+    maLabels.forEach((label, index) => {
+      if (label.textContent === "Moving Averages (20/50/200)") {
+        const valueEl = label.nextElementSibling;
+        if (valueEl) valueEl.textContent = `${Number(updates.ma20).toFixed(0)} / ${Number(updates.ma50).toFixed(0)} / ${Number(updates.ma200).toFixed(0)}`;
+      }
+    });
+  }
+  
+  // Update Bollinger Bands if provided
+  if (updates.bb_upper !== undefined && updates.bb_lower !== undefined) {
+    const bbLabels = document.querySelectorAll(".wf-metric-label");
+    bbLabels.forEach((label, index) => {
+      if (label.textContent === "Bollinger Bands") {
+        const valueEl = label.nextElementSibling;
+        if (valueEl) valueEl.textContent = `${Number(updates.bb_upper).toFixed(0)} / ${Number(updates.bb_lower).toFixed(0)}`;
+      }
+    });
+  }
 }
 
 function renderStock() {
@@ -1821,14 +1903,14 @@ document.addEventListener("visibilitychange", () => {
   if (document.hidden) {
     // Page is now hidden
     const currentPage = document.documentElement.getAttribute("data-page");
-    if (currentPage === "screener" && screenerWebSocket && screenerWebSocket.readyState === WebSocket.OPEN) {
+    if (currentPage === "screener" && window.screenerWebSocket && window.screenerWebSocket.readyState === WebSocket.OPEN) {
       console.log("Page hidden - keeping WebSocket open but noting state");
       // Keep connection open for background updates, just log the state
     }
   } else {
     // Page is now visible
     const currentPage = document.documentElement.getAttribute("data-page");
-    if (currentPage === "screener" && (!screenerWebSocket || screenerWebSocket.readyState !== WebSocket.OPEN)) {
+    if (currentPage === "screener" && (!window.screenerWebSocket || window.screenerWebSocket.readyState !== WebSocket.OPEN)) {
       console.log("Page visible and screener WebSocket not connected - reconnecting");
       setupScreenerWebSocket();
     }

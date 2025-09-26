@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, WebSocket
 from typing import Optional
 import os, json, logging
 from services.upstox_service import get_upstox_service
@@ -110,9 +110,11 @@ async def list_stocks(q: Optional[str] = None, min_gap: Optional[float] = None, 
         logger.error(f"Error fetching stocks: {e}")
         raise HTTPException(status_code=500, detail=f"Error fetching market data: {str(e)}")
 
-@router.get("/stocks/{symbol}")
-async def get_stock(symbol: str):
-    """Get detailed information for a specific stock"""
+@router.websocket("/stocks/{symbol}")
+async def ws_get_stock(websocket: WebSocket, symbol: str):
+    """WebSocket endpoint for real-time stock data and updates"""
+    await websocket.accept()
+
     try:
         symbol = symbol.upper()
 
@@ -122,20 +124,28 @@ async def get_stock(symbol: str):
 
         instrument_key = symbol_to_key.get(symbol)
         if not instrument_key:
-            raise HTTPException(status_code=404, detail=f"Symbol {symbol} not found in instruments")
+            await websocket.send_json({"error": f"Symbol {symbol} not found in instruments"})
+            await websocket.close()
+            return
 
         if not upstox.is_configured():
-            raise HTTPException(status_code=503, detail="Market data service not configured")
+            await websocket.send_json({"error": "Market data service not configured"})
+            await websocket.close()
+            return
 
+        # Send initial stock data
         upstox_key = f"NSE_EQ:{symbol}"
         quotes_data = upstox.get_market_quotes_batch([instrument_key])
         quote = quotes_data.get(upstox_key, {})
 
         if not quote:
-            raise HTTPException(status_code=404, detail=f"No market data available for {symbol}")
+            await websocket.send_json({"error": f"No market data available for {symbol}"})
+            await websocket.close()
+            return
 
         stock_data = upstox.format_stock_data(symbol, quote)
         stock_data["data_source"] = "upstox"
+        stock_data["type"] = "initial"
 
         if "instrument_token" in quote:
             stock_data["instrument_token"] = quote["instrument_token"]
@@ -157,7 +167,113 @@ async def get_stock(symbol: str):
         # For now, return empty alerts array - this should be replaced with real alert system
         stock_data["alerts"] = []
 
-        return stock_data
+        # Send initial data wrapped in stock property as expected by frontend
+        initial_data = {
+            "stock": stock_data,
+            "type": "initial"
+        }
+        
+        # Validate JSON serializability of initial data
+        try:
+            json.dumps(initial_data)
+        except (TypeError, ValueError) as json_error:
+            logger.error(f"Invalid JSON initial data for {symbol}: {json_error}")
+            await websocket.send_json({"error": "Invalid data format"})
+            await websocket.close()
+            return
+            
+        logger.info(f"Sending initial data for {symbol}")
+        await websocket.send_json(initial_data)
+
+        # Now subscribe to real-time updates for this symbol
+        try:
+            async for tick in upstox.subscribe_price_stream([instrument_key]):
+                # Find if this tick is for our symbol
+                tick_instrument_key = tick.get("instrument_key")
+                if tick_instrument_key == instrument_key:
+                    try:
+                        # Convert raw tick to quote format for processing
+                        quote_data = {
+                            "last_price": tick.get("ltp", 0),
+                            "prev_close_price": tick.get("cp", tick.get("ltp", 0)),
+                            "open_price": tick.get("open", tick.get("ltp", 0)),
+                            "volume": tick.get("vol", 0),
+                            "average_price": tick.get("atp", tick.get("ltp", 0)),
+                            "ohlc": {
+                                "open": tick.get("open", 0),
+                                "high": tick.get("high", 0),
+                                "low": tick.get("low", 0),
+                                "close": tick.get("close", tick.get("ltp", 0))
+                            }
+                        }
+
+                        # Format using the existing formatter
+                        formatted_stock_data = upstox.format_stock_data(symbol, quote_data)
+                        formatted_stock_data["type"] = "update"
+                        formatted_stock_data["symbol"] = symbol
+
+                        # Extract only the fields that the frontend expects for updates
+                        update_fields = {
+                            "price": formatted_stock_data.get("price"),
+                            "gap": formatted_stock_data.get("gap"),
+                            "volume": formatted_stock_data.get("volume"),
+                            "vwap": formatted_stock_data.get("vwap"),
+                            "rsi": formatted_stock_data.get("rsi"),
+                            "ma20": formatted_stock_data.get("ma20"),
+                            "ma50": formatted_stock_data.get("ma50"),
+                            "ma200": formatted_stock_data.get("ma200"),
+                            "bb_upper": formatted_stock_data.get("bb_upper"),
+                            "bb_lower": formatted_stock_data.get("bb_lower")
+                        }
+
+                        # Ensure all values are JSON serializable
+                        for key, value in update_fields.items():
+                            if value is None or (isinstance(value, float) and (value != value or value == float('inf') or value == float('-inf'))):
+                                update_fields[key] = 0  # Replace invalid values with 0
+
+                        # Send real-time update wrapped in updates property as expected by frontend
+                        update_message = {
+                            "type": "update",
+                            "updates": update_fields
+                        }
+
+                        # Validate JSON serializability
+                        try:
+                            json.dumps(update_message)
+                        except (TypeError, ValueError) as json_error:
+                            logger.error(f"Invalid JSON data for {symbol}: {json_error}, data: {update_message}")
+                            continue
+
+                        logger.debug(f"Sending update for {symbol}: {update_message}")
+
+                        # Send real-time update with only the changed fields
+                        try:
+                            await websocket.send_json(update_message)
+                        except Exception as send_error:
+                            logger.error(f"Error sending data for symbol {symbol}: {send_error} (type: {type(send_error).__name__})")
+                            if "close message has been sent" in str(send_error):
+                                logger.info(f"WebSocket disconnected, stopping tick processing for {symbol}")
+                                break
+                            else:
+                                logger.error(f"Unexpected error sending data for symbol {symbol}: {send_error}")
+                                continue
+
+                    except Exception as e:
+                        logger.error(f"Error processing tick data for symbol {symbol}: {e}")
+                        continue
+
+        except Exception as e:
+            logger.error(f"Error in stock price stream for {symbol}: {e}")
+            await websocket.send_json({"error": "Price streaming service unavailable"})
+            return
+
+    except Exception as e:
+        logger.error(f"Error in stock WebSocket for {symbol}: {e}")
+        try:
+            await websocket.send_json({"error": f"Internal server error: {str(e)}"})
+        except:
+            pass
+        await websocket.close()
 
     except HTTPException:
         raise

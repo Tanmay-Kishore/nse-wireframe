@@ -80,6 +80,7 @@ async def ws_screener(websocket: WebSocket):
         # Get all monitored symbols from journal and watchlist
         from routers.stocks import get_all_monitored_symbols
         symbols = get_all_monitored_symbols()
+        logger.info(f"Screener WebSocket: monitoring {len(symbols)} symbols: {symbols[:5]}...")
         
         # Get instrument keys for all symbols
         instrument_keys = []
@@ -106,6 +107,10 @@ async def ws_screener(websocket: WebSocket):
             key = symbol_to_key.get(symbol.upper())
             if key:
                 instrument_keys.append(key)
+            else:
+                logger.warning(f"No instrument key found for symbol: {symbol}")
+        
+        logger.info(f"Screener WebSocket: found {len(instrument_keys)} instrument keys out of {len(symbols)} symbols")
         
         if not instrument_keys:
             logger.warning(f"No instrument keys found for symbols: {symbols}")
@@ -144,12 +149,21 @@ async def ws_screener(websocket: WebSocket):
                         formatted_stock_data = upstox_service.format_stock_data(symbol, quote_data)
                         
                         # Send formatted data to frontend
-                        response = {
-                            "type": "stock_update",
-                            "symbol": symbol,
-                            "data": formatted_stock_data
-                        }
-                        await websocket.send_json(response)
+                        try:
+                            response = {
+                                "type": "stock_update",
+                                "symbol": symbol,
+                                "data": formatted_stock_data
+                            }
+                            logger.info(f"Sending screener update for {symbol}: price={formatted_stock_data.get('price')}")
+                            await websocket.send_json(response)
+                        except Exception as send_error:
+                            if "close message has been sent" in str(send_error):
+                                logger.info(f"WebSocket disconnected, stopping tick processing for {symbol}")
+                                break
+                            else:
+                                logger.error(f"Error sending data for symbol {symbol}: {send_error}")
+                                continue
                         
                     except Exception as e:
                         logger.error(f"Error processing tick data for symbol {symbol}: {e}")
@@ -233,12 +247,20 @@ async def ws_price(websocket: WebSocket, symbol: Optional[str] = Query(None)):
                         formatted_stock_data = upstox_service.format_stock_data(tick_symbol, quote_data)
                         
                         # Send formatted data to frontend
-                        response = {
-                            "symbol": tick_symbol,
-                            "price": formatted_stock_data.get("price"),
-                            "tick": formatted_stock_data
-                        }
-                        await websocket.send_json(response)
+                        try:
+                            response = {
+                                "symbol": tick_symbol,
+                                "price": formatted_stock_data.get("price"),
+                                "tick": formatted_stock_data
+                            }
+                            await websocket.send_json(response)
+                        except Exception as send_error:
+                            if "close message has been sent" in str(send_error):
+                                logger.info(f"WebSocket disconnected, stopping tick processing for {tick_symbol}")
+                                break
+                            else:
+                                logger.error(f"Error sending data for symbol {tick_symbol}: {send_error}")
+                                continue
                         
                     except Exception as e:
                         logger.error(f"Error processing tick data for symbol {tick_symbol}: {e}")

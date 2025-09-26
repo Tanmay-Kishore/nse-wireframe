@@ -7,7 +7,7 @@ import logging, os
 import requests
 import asyncio
 from typing import Dict, List, Optional, Any
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time
 import json
 import websockets
 from proto import market_data_feed_pb2
@@ -26,227 +26,20 @@ class UpstoxService:
         self.api_key = None
         self.api_secret = None
         self.last_tick_cache = {}
+        # Shared WebSocket connection management
+        self._ws_connection = None
+        self._ws_task = None
+        self._subscribers = {}  # instrument_key -> set of subscriber queues
+        self._connection_lock = asyncio.Lock()
         self._load_config()
 
     async def subscribe_price_stream(self, instrument_keys):
         """
-        Connects to Upstox WebSocket and yields live ticks for the given instrument_keys, decoding protobuf messages.
-        Aligned to Upstox official example: uses authorized websocket URL, SSL context, and correct subscribe message format.
-        
-        Features:
-        - Market hours checking to avoid unnecessary reconnections
-        - Exponential backoff for reconnection attempts
-        - Cache last ticks for use when market is closed
+        Subscribe to price updates using the shared WebSocket connection.
+        This method now uses the shared connection manager to avoid multiple connections.
         """
-        # Check if market is open
-        if not is_market_open():
-            logger.info("Market is closed. Using cached data or returning mock data.")
-            
-            # Return cached ticks or generate mock data for each instrument key
-            for key in instrument_keys:
-                # Look for cached tick
-                cached_tick = self.last_tick_cache.get(key)
-                if cached_tick:
-                    cached_tick["cached"] = True
-                    yield cached_tick
-                else:
-                    # Create mock tick data
-                    mock_tick = {
-                        "ltp": 0,
-                        "open": 0,
-                        "high": 0,
-                        "low": 0,
-                        "close": 0,
-                        "vol": 0,
-                        "instrument_key": key,
-                        "cached": True,
-                        "mock": True,
-                        "market_status": "CLOSED",
-                        "next_market_event": get_market_status()["next_event"]
-                    }
-                    yield mock_tick
-            
-            # Don't proceed with websocket connection when market is closed
-            return
-            
-        # Exponential backoff parameters
-        max_retries = 5
-        base_delay = 2  # seconds
-        retry_count = 0
-        
-        while retry_count < max_retries:
-            try:
-                # Step 1: Get authorized websocket URL
-                auth_url = f"{self.base_url}/feed/market-data-feed/authorize"
-                headers = {
-                    "Authorization": f"Bearer {self.access_token}",
-                    "Accept": "application/json"
-                }
-                resp = requests.get(auth_url, headers=headers, timeout=10)
-                resp.raise_for_status()
-                auth_data = resp.json()
-                ws_url = auth_data["data"]["authorized_redirect_uri"]
-                
-                # Step 2: Create SSL context
-                import ssl
-                ssl_context = ssl.create_default_context()
-                ssl_context.check_hostname = False
-                ssl_context.verify_mode = ssl.CERT_NONE
-                
-                # Reset retry count on successful connection
-                retry_count = 0
-                # Limit instruments to prevent overwhelming Upstox
-                max_instruments = 15  # Reduce from 20 to 15 to prevent timeouts
-                limited_keys = instrument_keys[:max_instruments]
-
-                logger.info(f"Connecting to Upstox websocket with {len(limited_keys)} instruments (limited from {len(instrument_keys)})")
-
-                # Step 3: Connect to websocket
-                async with websockets.connect(ws_url, ssl=ssl_context, ping_interval=30, ping_timeout=10) as ws:
-                    # Step 4: Send subscribe message (use 'instrumentKeys' camelCase)
-                    subscribe_msg = {
-                        "guid": "client-1",
-                        "method": "sub",
-                        "data": {
-                            "mode": "full",
-                            "instrumentKeys": limited_keys
-                        }
-                    }
-
-                    # Send subscription with timeout to prevent hanging
-                    try:
-                        await asyncio.wait_for(
-                            ws.send(json.dumps(subscribe_msg).encode('utf-8')),
-                            timeout=10.0
-                        )
-                        logger.info(f"Subscription sent for {len(limited_keys)} instruments")
-                    except asyncio.TimeoutError:
-                        logger.error("Subscription timeout - Upstox may be overloaded")
-                        break
-                    
-                    # Step 5: Receive and decode messages with timeout
-                    while True:
-                        # Check if market is still open
-                        if not is_market_open():
-                            logger.info("Market closed during websocket session. Stopping stream.")
-                            break
-
-                        try:
-                            # Add timeout to prevent blocking indefinitely
-                            msg = await asyncio.wait_for(ws.recv(), timeout=30.0)
-                        except asyncio.TimeoutError:
-                            logger.warning("WebSocket message timeout - continuing...")
-                            continue
-                        except Exception as e:
-                            logger.error(f"WebSocket receive error: {e}")
-                            break
-                        try:
-                            # Try to decode as protobuf directly (Upstox v3)
-                            feed_response = market_data_feed_pb2.FeedResponse()
-                            if isinstance(msg, bytes):
-                                feed_response.ParseFromString(msg)
-                            else:
-                                # If message is JSON with base64 'data' field (older Upstox)
-                                msg_obj = json.loads(msg)
-                                if "data" in msg_obj:
-                                    pb_bytes = base64.b64decode(msg_obj["data"])
-                                    feed_response.ParseFromString(pb_bytes)
-                                else:
-                                    continue
-                            # Extract ticks for each instrument
-                            for key, feed in feed_response.feeds.items():
-                                tick = {}
-                                fields = [desc.name for desc, _ in feed.ListFields()]
-                                if "fullFeed" in fields:
-                                    full_feed = feed.fullFeed
-                                    # Parse marketFF under fullFeed
-                                    if full_feed.HasField("marketFF"):
-                                        market_ff = full_feed.marketFF
-                                        # Parse ltpc (last traded price info)
-                                        if market_ff.HasField("ltpc"):
-                                            tick["ltp"] = market_ff.ltpc.ltp
-                                            tick["ltt"] = market_ff.ltpc.ltt
-                                            tick["ltq"] = market_ff.ltpc.ltq
-                                            tick["cp"] = market_ff.ltpc.cp
-                                        # Parse bid/ask quotes (market depth)
-                                        if market_ff.HasField("marketLevel"):
-                                            bid_ask_quotes = []
-                                            for baq in market_ff.marketLevel.bidAskQuote:
-                                                bid_ask_quotes.append({
-                                                    "bidQ": baq.bidQ,
-                                                    "bidP": baq.bidP,
-                                                    "askQ": baq.askQ,
-                                                    "askP": baq.askP
-                                                })
-                                            tick["bid_ask_quotes"] = bid_ask_quotes
-                                        # Parse OHLC data
-                                        if market_ff.HasField("marketOHLC"):
-                                            ohlc_list = market_ff.marketOHLC.ohlc
-                                            ohlc_data = []
-                                            for ohlc in ohlc_list:
-                                                ohlc_data.append({
-                                                    "interval": ohlc.interval,
-                                                    "open": ohlc.open,
-                                                    "high": ohlc.high,
-                                                    "low": ohlc.low,
-                                                    "close": ohlc.close,
-                                                    "vol": ohlc.vol,
-                                                    "ts": ohlc.ts
-                                                })
-                                            tick["ohlc"] = ohlc_data
-                                            # For convenience, also set 1d OHLC as top-level fields if present
-                                            for ohlc in ohlc_data:
-                                                if ohlc["interval"] == "1d":
-                                                    tick["open"] = ohlc["open"]
-                                                    tick["high"] = ohlc["high"]
-                                                    tick["low"] = ohlc["low"]
-                                                    tick["close"] = ohlc["close"]
-                                                    tick["vol"] = ohlc["vol"]
-                                                    break
-                                        # Parse ATP, VTT, TBQ, TSQ (scalar fields, no HasField)
-                                        tick["atp"] = market_ff.atp
-                                        tick["vtt"] = market_ff.vtt
-                                        tick["tbq"] = market_ff.tbq
-                                        tick["tsq"] = market_ff.tsq
-                                        tick["instrument_key"] = key
-                                # Add more parsing as needed for other feed types
-                                if tick:
-                                    # Cache this tick
-                                    self.last_tick_cache[key] = tick
-                                    # Add market status
-                                    tick["market_status"] = "OPEN"
-                                    yield tick
-                        except Exception as e:
-                            logger.error(f"Error decoding Upstox tick: {e}")
-                            continue
-            
-            except websockets.exceptions.ConnectionClosedError as e:
-                # Connection closed, check if it's due to market being closed
-                if not is_market_open():
-                    logger.info("Market is now closed. Not attempting reconnection.")
-                    break
-                retry_count += 1
-                wait_time = min(60, base_delay * (2 ** retry_count))  # Exponential backoff, max 60s
-                logger.warning(f"WebSocket connection closed: {e}. Retry {retry_count}/{max_retries} in {wait_time}s")
-                await asyncio.sleep(wait_time)
-            
-            except Exception as e:
-                retry_count += 1
-                wait_time = min(60, base_delay * (2 ** retry_count))
-                logger.error(f"WebSocket error: {e}. Retry {retry_count}/{max_retries} in {wait_time}s")
-                await asyncio.sleep(wait_time)
-        
-        # If we've reached max retries or market closed, yield cached data
-        if retry_count >= max_retries:
-            logger.error(f"Max retries ({max_retries}) reached. Using cached data.")
-            
-        # Return any cached data we have for the requested instruments
-        for key in instrument_keys:
-            cached_tick = self.last_tick_cache.get(key)
-            if cached_tick:
-                cached_tick["cached"] = True
-                cached_tick["market_status"] = "CLOSED" if not is_market_open() else "ERROR"
-                yield cached_tick
+        async for tick in self.subscribe_to_instruments(instrument_keys):
+            yield tick
     
     def _load_config(self):
         """Load Upstox configuration"""
@@ -259,6 +52,222 @@ class UpstoxService:
                 logger.info("Upstox configuration loaded successfully")
         except Exception as e:
             logger.error(f"Error loading Upstox config: {e}")
+    
+    async def _ensure_connection(self):
+        """Ensure a shared WebSocket connection exists"""
+        async with self._connection_lock:
+            if self._ws_connection is None or self._ws_task is None or self._ws_task.done():
+                # Start a new connection
+                self._ws_task = asyncio.create_task(self._maintain_connection())
+    
+    async def _maintain_connection(self):
+        """Maintain the shared WebSocket connection"""
+        max_retries = 5
+        retry_count = 0
+        
+        while retry_count < max_retries:
+            try:
+                # Check if market is open
+                if not is_market_open():
+                    logger.info("Market is closed. Connection will resume when market opens.")
+                    await asyncio.sleep(60)  # Check again in 1 minute
+                    continue
+                
+                # Get authorized websocket URL
+                auth_url = f"{self.base_url}/feed/market-data-feed/authorize"
+                headers = self._get_headers()
+                resp = requests.get(auth_url, headers=headers, timeout=10)
+                resp.raise_for_status()
+                auth_data = resp.json()
+                ws_url = auth_data["data"]["authorized_redirect_uri"]
+                
+                # Create SSL context
+                import ssl
+                ssl_context = ssl.create_default_context()
+                ssl_context.check_hostname = False
+                ssl_context.verify_mode = ssl.CERT_NONE
+                
+                logger.info("Connecting to Upstox WebSocket...")
+                
+                # Connect with better ping settings
+                async with websockets.connect(
+                    ws_url, 
+                    ssl=ssl_context, 
+                    ping_interval=20,  # More frequent pings
+                    ping_timeout=15,   # Longer timeout
+                    close_timeout=5
+                ) as ws:
+                    self._ws_connection = ws
+                    retry_count = 0  # Reset retry count on successful connection
+                    
+                    # Subscribe to all currently requested instruments
+                    current_instruments = list(self._subscribers.keys())
+                    if current_instruments:
+                        subscribe_msg = {
+                            "guid": "shared-connection",
+                            "method": "sub",
+                            "data": {
+                                "mode": "full",
+                                "instrumentKeys": current_instruments
+                            }
+                        }
+                        
+                        await asyncio.wait_for(
+                            ws.send(json.dumps(subscribe_msg).encode('utf-8')),
+                            timeout=10.0
+                        )
+                        logger.info(f"Subscribed to {len(current_instruments)} instruments")
+                    
+                    # Message processing loop
+                    while True:
+                        try:
+                            # Receive message with timeout
+                            msg = await asyncio.wait_for(ws.recv(), timeout=60.0)
+                            
+                            # Process the message
+                            await self._process_message(msg)
+                            
+                        except asyncio.TimeoutError:
+                            logger.warning("WebSocket message timeout")
+                            continue
+                        except websockets.exceptions.ConnectionClosed:
+                            logger.warning("WebSocket connection closed")
+                            break
+                        except Exception as e:
+                            logger.error(f"Error processing WebSocket message: {e}")
+                            continue
+                            
+            except Exception as e:
+                retry_count += 1
+                wait_time = min(60, 2 ** retry_count)  # Exponential backoff
+                logger.error(f"WebSocket connection error: {e}. Retry {retry_count}/{max_retries} in {wait_time}s")
+                await asyncio.sleep(wait_time)
+        
+        # Clean up
+        self._ws_connection = None
+        logger.error("Max retries reached. WebSocket connection failed.")
+    
+    async def _process_message(self, msg):
+        """Process incoming WebSocket message"""
+        try:
+            # Decode protobuf message
+            feed_response = market_data_feed_pb2.FeedResponse()
+            if isinstance(msg, bytes):
+                feed_response.ParseFromString(msg)
+            else:
+                # Handle JSON with base64 data
+                msg_obj = json.loads(msg)
+                if "data" in msg_obj:
+                    pb_bytes = base64.b64decode(msg_obj["data"])
+                    feed_response.ParseFromString(pb_bytes)
+                else:
+                    return
+            
+            # Process each feed
+            for key, feed in feed_response.feeds.items():
+                tick = self._parse_feed(feed, key)
+                if tick:
+                    # Cache the tick
+                    self.last_tick_cache[key] = tick
+                    tick["market_status"] = "OPEN"
+                    
+                    # Send to all subscribers for this instrument
+                    if key in self._subscribers:
+                        for queue in self._subscribers[key]:
+                            try:
+                                await queue.put(tick)
+                            except Exception as e:
+                                logger.error(f"Error sending tick to subscriber: {e}")
+                                
+        except Exception as e:
+            logger.error(f"Error processing message: {e}")
+    
+    def _parse_feed(self, feed, instrument_key):
+        """Parse a feed message into tick data"""
+        tick = {"instrument_key": instrument_key}
+        
+        if feed.HasField("fullFeed"):
+            full_feed = feed.fullFeed
+            if full_feed.HasField("marketFF"):
+                market_ff = full_feed.marketFF
+                
+                # LTP data
+                if market_ff.HasField("ltpc"):
+                    tick["ltp"] = market_ff.ltpc.ltp
+                    tick["ltt"] = market_ff.ltpc.ltt
+                    tick["ltq"] = market_ff.ltpc.ltq
+                    tick["cp"] = market_ff.ltpc.cp
+                
+                # OHLC data
+                if market_ff.HasField("marketOHLC"):
+                    ohlc_list = market_ff.marketOHLC.ohlc
+                    for ohlc in ohlc_list:
+                        if ohlc.interval == "1d":
+                            tick["open"] = ohlc.open
+                            tick["high"] = ohlc.high
+                            tick["low"] = ohlc.low
+                            tick["close"] = ohlc.close
+                            tick["vol"] = ohlc.vol
+                            break
+                
+                # Additional fields
+                tick["atp"] = getattr(market_ff, 'atp', 0)
+                tick["vtt"] = getattr(market_ff, 'vtt', 0)
+        
+        return tick if tick.get("ltp") is not None else None
+    
+    async def subscribe_to_instruments(self, instrument_keys):
+        """Subscribe to specific instruments and return an async generator of ticks"""
+        # Ensure connection exists
+        await self._ensure_connection()
+        
+        # Create a queue for this subscriber
+        queue = asyncio.Queue()
+        
+        # Register subscriber for each instrument
+        for key in instrument_keys:
+            if key not in self._subscribers:
+                self._subscribers[key] = set()
+            self._subscribers[key].add(queue)
+        
+        try:
+            # Send subscription update if connection exists
+            if self._ws_connection:
+                subscribe_msg = {
+                    "guid": "shared-connection",
+                    "method": "sub",
+                    "data": {
+                        "mode": "full",
+                        "instrumentKeys": instrument_keys
+                    }
+                }
+                try:
+                    await asyncio.wait_for(
+                        self._ws_connection.send(json.dumps(subscribe_msg).encode('utf-8')),
+                        timeout=5.0
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to update subscription: {e}")
+            
+            # Yield ticks from the queue
+            while True:
+                try:
+                    tick = await asyncio.wait_for(queue.get(), timeout=30.0)
+                    yield tick
+                except asyncio.TimeoutError:
+                    # Check if we should still be subscribed
+                    continue
+                except Exception as e:
+                    logger.error(f"Error in tick subscription: {e}")
+                    break
+                    
+        finally:
+            # Unregister subscriber
+            for key in instrument_keys:
+                if key in self._subscribers:
+                    self._subscribers[key].discard(queue)
+                    if not self._subscribers[key]:
+                        del self._subscribers[key]
     
     def _get_headers(self) -> Dict[str, str]:
         """Get API headers with authorization"""
@@ -943,17 +952,17 @@ def get_market_status():
         
     # Set the next event time
     if is_open:
-        next_event = datetime.combine(today, datetime.time(15, 30))
+        next_event = datetime.combine(today, time(15, 30))
         next_event_type = "closing"
     else:
         # If current time is after market close
         if now.hour > 15 or (now.hour == 15 and now.minute >= 30):
             # Set for next day's opening
-            next_event = datetime.combine(next_day, datetime.time(9, 15))
+            next_event = datetime.combine(next_day, time(9, 15))
             next_event_type = "opening"
         else:
             # Set for today's opening
-            next_event = datetime.combine(today, datetime.time(9, 15))
+            next_event = datetime.combine(today, time(9, 15))
             next_event_type = "opening"
             
     return {
