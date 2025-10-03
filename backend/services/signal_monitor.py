@@ -18,6 +18,55 @@ class SignalMonitorService:
         self.watchlist_path = os.path.join(os.path.dirname(__file__), '../data/watchlist.json')
         self.monitoring = False
         self.monitor_task = None
+    
+    def moving_average_crossover_signal(self, prices: List[float], short_window: int = 10, long_window: int = 30) -> str:
+        """
+        Generate buy/sell/hold signal based on Moving Average crossover.
+        Returns 'BUY', 'SELL', or 'HOLD'.
+        """
+        if len(prices) < long_window + 1:
+            return 'HOLD'  # Not enough data
+
+        short_ma_prev = sum(prices[-short_window-1:-1]) / short_window
+        long_ma_prev = sum(prices[-long_window-1:-1]) / long_window
+        short_ma_curr = sum(prices[-short_window:]) / short_window
+        long_ma_curr = sum(prices[-long_window:]) / long_window
+
+        # Crossover logic
+        if short_ma_prev <= long_ma_prev and short_ma_curr > long_ma_curr:
+            return 'BUY'  # Bullish crossover
+        elif short_ma_prev >= long_ma_prev and short_ma_curr < long_ma_curr:
+            return 'SELL'  # Bearish crossover
+        else:
+            return 'HOLD'
+
+    async def get_ma_crossover_signals(self) -> Dict[str, Dict]:
+        """
+        Get MA crossover signals for all stocks in the watchlist.
+        """
+        try:
+            from routers.stocks import list_stocks
+            response = await list_stocks()
+            stocks = response.get('items', [])
+            signals = {}
+            for stock in stocks:
+                symbol = stock.get('symbol')
+                # Get historical prices
+                history = stock.get('history', [])
+                prices = [h.get('price') for h in history if h.get('price') is not None]
+                # Add current price
+                if stock.get('price') is not None:
+                    prices.append(stock['price'])
+                signal = self.moving_average_crossover_signal(prices)
+                signals[symbol] = {
+                    'ma_crossover_signal': signal,
+                    'price': stock.get('price'),
+                    'timestamp': datetime.now().isoformat()
+                }
+            return signals
+        except Exception as e:
+            logger.error(f"Error getting MA crossover signals: {e}")
+            return {}
 
     def _load_watchlist_with_signals(self) -> Dict:
         """Load watchlist with cached signals"""
@@ -245,6 +294,13 @@ Choose your action:"""
 
             # Detect changes
             changes = self.detect_signal_changes(current_signals)
+
+            # Get MA crossover signals for all stocks
+            ma_crossover_signals = await self.get_ma_crossover_signals()
+            # Log or process MA crossover signals (example: log BUY/SELL signals)
+            for symbol, signal_info in ma_crossover_signals.items():
+                if signal_info['ma_crossover_signal'] in ['BUY', 'SELL']:
+                    logger.info(f"MA Crossover {signal_info['ma_crossover_signal']} signal for {symbol} at price {signal_info['price']}")
 
             if changes:
                 logger.info(f"Detected {len(changes)} signal changes")

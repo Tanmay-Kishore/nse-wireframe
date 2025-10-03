@@ -1,6 +1,11 @@
 /* Simple wireframe JS to fetch mock API and render cards */
 const API_BASE = "/api";
 
+// Global WebSocket references for cleanup
+window.screenerWebSocket = null;
+window.stockDetailWebSocket = null;
+window.journalWebSocket = null;
+
 // Authentication helper functions
 const auth = {
   // Store token
@@ -370,11 +375,6 @@ function renderScreener() {
     });
   }
 
-  // Global WebSocket references for cleanup
-  window.screenerWebSocket = null;
-  window.stockDetailWebSocket = null;
-  window.journalWebSocket = null;
-
   function setupScreenerWebSocket() {
     // Close existing WebSocket if any
     if (window.screenerWebSocket) {
@@ -698,24 +698,24 @@ async function setupWatchlistButton(symbol) {
 
 function setupJournalWebSocket() {
   // Close existing WebSocket if any
-  if (journalWebSocket) {
-    journalWebSocket.close();
-    journalWebSocket = null;
+  if (window.journalWebSocket) {
+    window.journalWebSocket.close();
+    window.journalWebSocket = null;
   }
 
-  journalWebSocket = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws/price`);
+  window.journalWebSocket = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws/price`);
 
-  journalWebSocket.onopen = () => {
+  window.journalWebSocket.onopen = () => {
     console.log("Journal WebSocket connected");
   };
 
-  journalWebSocket.onmessage = (ev) => {
+  window.journalWebSocket.onmessage = (ev) => {
     const data = JSON.parse(ev.data);
     
     // Handle authentication errors
     if (data.error) {
       console.error("Journal WebSocket authentication error:", data.error);
-      journalWebSocket.close();
+      window.journalWebSocket.close();
       return;
     }
     
@@ -723,19 +723,19 @@ function setupJournalWebSocket() {
     updateJournalPrice(data.symbol, data.price, data.tick);
   };
 
-  journalWebSocket.onclose = () => {
+  window.journalWebSocket.onclose = () => {
     console.log("Journal WebSocket disconnected");
   };
 
-  journalWebSocket.onerror = (error) => {
+  window.journalWebSocket.onerror = (error) => {
     console.error("Journal WebSocket error:", error);
   };
 }
 
 function cleanupJournalWebSocket() {
-  if (journalWebSocket) {
-    journalWebSocket.close();
-    journalWebSocket = null;
+  if (window.journalWebSocket) {
+    window.journalWebSocket.close();
+    window.journalWebSocket = null;
   }
 }
 
@@ -932,7 +932,7 @@ function renderStockData(stock) {
   `;
   
   // Setup watchlist button after HTML is rendered
-  setupWatchlistButton(symbol);
+  setupWatchlistButton(stock.symbol);
   
   // Alerts list - handle missing alerts gracefully
   const al = document.getElementById("stock-alerts");
