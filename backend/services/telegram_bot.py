@@ -657,7 +657,30 @@ async def send_alert(message: str, reply_markup=None) -> bool:
             return False
 
         chat_id = config["chat_id"]
-        return await telegram_bot.send_message(chat_id, message, reply_markup)
+
+        # Send Telegram message
+        result = await telegram_bot.send_message(chat_id, message, reply_markup)
+
+        # Also POST alert to backend /api/alerts for frontend display
+        try:
+            import aiohttp
+            from datetime import datetime
+            async with aiohttp.ClientSession() as session:
+                alert_payload = {
+                    "ts": datetime.now().isoformat(),
+                    "message": message,
+                    "symbol": "SYSTEM",
+                    "severity": "info"
+                }
+                await session.post(
+                    "http://localhost:8000/api/alerts",
+                    json=alert_payload,
+                    timeout=aiohttp.ClientTimeout(total=3)
+                )
+        except Exception as e:
+            logger.warning(f"Failed to post alert to /api/alerts: {e}")
+
+        return result
 
     except Exception as e:
         logger.error(f"Error sending alert: {e}")
